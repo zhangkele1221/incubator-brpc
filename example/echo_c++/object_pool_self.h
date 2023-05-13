@@ -74,21 +74,21 @@ static const size_t OP_GROUP_NBLOCK = (1UL << OP_GROUP_NBLOCK_NBIT);
 static const size_t OP_INITIAL_FREE_LIST_SIZE = 1024;
 
 
-template <typename T> struct ObjectPoolBlockMaxSize {
+template <typename T> struct ObjectPoolBlockMaxSize {//定义了每个块的最大字节大小，这里设置为 64 * 1024 字节（即 64KB）
     static const size_t value = 64 * 1024; // bytes
 };
-template <typename T> struct ObjectPoolBlockMaxItem {
+template <typename T> struct ObjectPoolBlockMaxItem {//定义了每个块中最多可以容纳的项目数量，这里设置为 256 个
     static const size_t value = 256;
 };
 
-template <typename T> class ObjectPoolBlockItemNum {
-  static const size_t N1 = ObjectPoolBlockMaxSize<T>::value / sizeof(T);
-  static const size_t N2 = (N1 < 1 ? 1 : N1);
+template <typename T> class ObjectPoolBlockItemNum {//计算类，用于确定每个块实际包含的项目数量。它根据以下步骤计算：
+  static const size_t N1 = ObjectPoolBlockMaxSize<T>::value / sizeof(T);//这个值 表示块的最大字节大小可以容纳多少个对象。
+  static const size_t N2 = (N1 < 1 ? 1 : N1);//这样可以确保每个块至少包含一个对象。
 
 public:
   static const size_t value =
       (N2 > ObjectPoolBlockMaxItem<T>::value ? ObjectPoolBlockMaxItem<T>::value
-                                             : N2);
+                                             : N2);//如果 N2 大于最大项目数，则将 value 设置为最大项目数，否则将 value 设置为 N2。这个值表示每个块实际应包含的项目数量。
 };
 
 template <typename T> class BAIDU_CACHELINE_ALIGNMENT ObjectPool {
