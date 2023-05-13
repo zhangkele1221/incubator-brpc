@@ -93,7 +93,7 @@ public:
 
 template <typename T> class BAIDU_CACHELINE_ALIGNMENT ObjectPool {
 public:
-  static const size_t BLOCK_NITEM = ObjectPoolBlockItemNum<T>::value;
+  static const size_t BLOCK_NITEM = ObjectPoolBlockItemNum<T>::value;//这个值表示每个块实际应包含的项目数量。
   static const size_t FREE_CHUNK_NITEM = BLOCK_NITEM;
 
   // Free objects are batched in a FreeChunk before they're added to
