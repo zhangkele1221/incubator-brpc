@@ -93,7 +93,7 @@ TEST_F(ObjectPoolTest, change_config) {
     int a[2];
     printf("%lu\n", ARRAY_SIZE(a));
     
-    ObjectPoolInfo info = describe_objects<MyObject>();
+    ObjectPoolInfo info = butil::describe_objects<MyObject>();
     ObjectPoolInfo zero_info = { 0, 0, 0, 0, 3, 3, 0 };
     ASSERT_EQ(0, memcmp(&info, &zero_info, sizeof(info)));
 
