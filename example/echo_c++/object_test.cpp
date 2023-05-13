@@ -3,7 +3,6 @@
 #include "butil/object_pool.h"
 
 using namespace std;
-
 using namespace butil;
 
 struct MyObject {};
