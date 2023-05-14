@@ -6,6 +6,8 @@
 #include <iostream>  // std::ostream
 #include <pthread.h> // pthread_mutex_t
 
+#include <atomic>
+
 //#include "butil/atomicops.h"              // butil::atomic
 //#include "butil/macros.h"                 // BAIDU_CACHELINE_ALIGNMENT
 //#include "butil/scoped_lock.h"            // BAIDU_SCOPED_LOCK
@@ -209,7 +211,7 @@ public:
     FreeChunk _cur_free;
   };
 
-  inline LocalPool *get_or_new_local_pool() {
+  inline LocalPool *get_or_new_local_pool() {//通过这个函数，可以确保每个线程都有一个与之关联的 LocalPool 实例，并且在线程退出时正确地删除这些实例。
     LocalPool *lp = _local_pool;
     if (BAIDU_LIKELY(lp != NULL)) {
       return lp;
@@ -223,8 +225,9 @@ public:
     std::lock_guard<std::mutex> scoped_locker_dummy_at_line_42(
         _change_thread_mutex);
     _local_pool = lp;
-    butil::thread_atexit(LocalPool::delete_local_pool, lp);//线程退出时候 处理的一些任务 pthrea的库中有类似的函数
-    _nlocal.fetch_add(1, butil::memory_order_relaxed);
+    butil::thread_atexit(LocalPool::delete_local_pool, lp);//线程退出时候 处理的一些任务 pthrea的库中有类似的函数  以便在当前线程退出时自动删除关联的 LocalPool 实例
+   //_nlocal.fetch_add(1, butil::memory_order_relaxed);//使用 fetch_add 函数原子地递增 _nlocal 成员变量的值。butil::memory_order_relaxed 表示使用松散的内存顺序，这意味着在递增 _nlocal 时不需要保证其他内存操作的顺序。
+    _nlocal.fetch_add(1, std::memory_order_relaxed);
     return lp;
   }
 
@@ -237,9 +240,60 @@ public:
   }
 
 
+    static inline ObjectPool* singleton() {
+        ObjectPool* p = _singleton.load(std::memory_order_consume);
+        if (p) {
+            return p;
+        }
+        pthread_mutex_lock(&_singleton_mutex);
+        p = _singleton.load(std::memory_order_consume);
+        if (!p) {
+            p = new ObjectPool();
+            _singleton.store(p, std::memory_order_release);
+        }
+        pthread_mutex_unlock(&_singleton_mutex);
+        return p;
+    }
+
+private:
+    ObjectPool() {
+        _free_chunks.reserve(OP_INITIAL_FREE_LIST_SIZE);
+        pthread_mutex_init(&_free_chunks_mutex, NULL);
+    }
+
+    ~ObjectPool() {
+        pthread_mutex_destroy(&_free_chunks_mutex);
+    }
+
+
+  static std::atomic<ObjectPool*> _singleton;
+  static pthread_mutex_t _singleton_mutex;
+
+  static std::atomic<long> _nlocal;
   static __thread LocalPool* _local_pool;
 
   static pthread_mutex_t _change_thread_mutex;
+
+
+  std::vector<DynamicFreeChunk*> _free_chunks;
+  pthread_mutex_t _free_chunks_mutex;
+  
 };
+
+
+template <typename T>
+__thread typename ObjectPool<T>::LocalPool*
+ObjectPool<T>::_local_pool = NULL;
+
+template <typename T>
+std::atomic<ObjectPool<T>*> ObjectPool<T>::_singleton = NULL;
+
+
+template <typename T>
+std::atomic<long> ObjectPool<T>::_nlocal = 0;
+
+template <typename T>
+pthread_mutex_t ObjectPool<T>::_singleton_mutex = PTHREAD_MUTEX_INITIALIZER;
+
 
 } // namespace butil
