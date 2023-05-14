@@ -240,14 +240,14 @@ public:
                 BlockGroup* const g =
                     _block_groups[ngroup - 1].load(std::memory_order_consume);
                 const size_t block_index =
-                    g->nblock.fetch_add(1, std::memory_order_relaxed);
-                if (block_index < OP_GROUP_NBLOCK) {
+                    g->nblock.fetch_add(1, std::memory_order_relaxed);//使用 fetch_add 函数为当前 block 组的 nblock 原子变量增加 1，并将结果存储在 block_index 中。使用 std::memory_order_relaxed 内存顺序模型。
+                if (block_index < OP_GROUP_NBLOCK) {//如果 block_index 小于 OP_GROUP_NBLOCK (表示当前 block 组中还有可用空间），将新创建的 new_block 存储到 block 组的 blocks[block_index] 中，使用 std::memory_order_release 内存顺序模型。然后，计算新 Block 的全局索引，并将其存储在 *index 中，最后返回新创建的 Block。
                     g->blocks[block_index].store(
                         new_block, std::memory_order_release);
-                    *index = (ngroup - 1) * OP_GROUP_NBLOCK + block_index;
+                    *index = (ngroup - 1) * OP_GROUP_NBLOCK + block_index;//计算新 Block 的全局索引，并将其存储在 *index 中
                     return new_block;
                 }
-                g->nblock.fetch_sub(1, std::memory_order_relaxed);
+                g->nblock.fetch_sub(1, std::memory_order_relaxed);// 如果 block_index 不满足条件（即当前 block 组已满），使用 fetch_sub 函数将 block 组的 nblock 原子变量减 1，使用 std::memory_order_relaxed 内存顺序模型。
             }
         } while (add_block_group(ngroup));
 
