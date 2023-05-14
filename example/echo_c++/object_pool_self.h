@@ -13,6 +13,8 @@
 
 #include <vector>
 
+//#define BAIDU_THREAD_LOCAL __thread
+
 #define BAIDU_LIKELY(expr) (expr)
 #define BAIDU_UNLIKELY(expr) (expr)
 
@@ -221,7 +223,7 @@ public:
     std::lock_guard<std::mutex> scoped_locker_dummy_at_line_42(
         _change_thread_mutex);
     _local_pool = lp;
-    butil::thread_atexit(LocalPool::delete_local_pool, lp);
+    butil::thread_atexit(LocalPool::delete_local_pool, lp);//线程退出时候 处理的一些任务 pthrea的库中有类似的函数
     _nlocal.fetch_add(1, butil::memory_order_relaxed);
     return lp;
   }
@@ -233,6 +235,9 @@ public:
     }
     return NULL;
   }
+
+
+  static __thread LocalPool* _local_pool;
 
   static pthread_mutex_t _change_thread_mutex;
 };
