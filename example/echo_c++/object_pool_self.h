@@ -179,6 +179,7 @@ public:
   /* Fetch a Block from global */                                              \
   _cur_block = add_block(&_cur_block_index);                                   \
   if (_cur_block != NULL) {                                                    \
+    // 这个就叫 placemen new 指定位置 new  就在我之前分配的那块空间上new 对象
     T *obj = new ((T *)_cur_block->items + _cur_block->nitem) T CTOR_ARGS;     \
     if (!ObjectPoolValidator<T>::validate(obj)) {                              \
       obj->~T();                                                               \
@@ -240,7 +241,7 @@ public:
             ngroup = _ngroup.load(std::memory_order_acquire);//a. 从 _ngroup 原子变量中加载当前的 block 组数量 ngroup，使用 std::memory_order_acquire 内存顺序模型。
             if (ngroup >= 1) {//如果 ngroup 大于等于 1，获取最后一个 block 组 g。
                 BlockGroup* const g =
-                    _block_groups[ngroup - 1].load(std::memory_order_consume);
+                    _block_groups[ngroup - 1].load(std::memory_order_consume);//获取 add_block_group 创建的 BlockGroup
                 const size_t block_index =
                     g->nblock.fetch_add(1, std::memory_order_relaxed);//使用 fetch_add 函数为当前 block 组的 nblock 原子变量增加 1，并将结果存储在 block_index 中。使用 std::memory_order_relaxed 内存顺序模型。
                 if (block_index < OP_GROUP_NBLOCK) {//如果 block_index 小于 OP_GROUP_NBLOCK (表示当前 block 组中还有可用空间），将新创建的 new_block 存储到 block 组的 blocks[block_index] 中，使用 std::memory_order_release 内存顺序模型。然后，计算新 Block 的全局索引，并将其存储在 *index 中，最后返回新创建的 Block。
@@ -260,7 +261,7 @@ public:
 
     // Create a BlockGroup and append it to _block_groups.
     // Shall be called infrequently because a BlockGroup is pretty big.
-    static bool add_block_group(size_t old_ngroup) {
+    static bool add_block_group(size_t old_ngroup) {//这里就是会 new 一个 BlockGroup _ngroup 也会加 1
         BlockGroup* bg = NULL;
         //BAIDU_SCOPED_LOCK(_block_group_mutex);
         std::lock_guard<std::mutex> scoped_locker_dummy_at_line_43(_block_group_mutex);
