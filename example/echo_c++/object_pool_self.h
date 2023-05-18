@@ -73,7 +73,7 @@ struct ObjectPoolInfo {
 
 static const size_t OP_MAX_BLOCK_NGROUP = 65536;
 static const size_t OP_GROUP_NBLOCK_NBIT = 16;
-static const size_t OP_GROUP_NBLOCK = (1UL << OP_GROUP_NBLOCK_NBIT);
+static const size_t OP_GROUP_NBLOCK = (1UL << OP_GROUP_NBLOCK_NBIT);//65536
 static const size_t OP_INITIAL_FREE_LIST_SIZE = 1024;
 
 
@@ -97,7 +97,7 @@ public:
 template <typename T> class BAIDU_CACHELINE_ALIGNMENT ObjectPool {
 public:
   static const size_t BLOCK_NITEM = ObjectPoolBlockItemNum<T>::value;//这个值表示每个块实际应包含的项目数量。
-  static const size_t FREE_CHUNK_NITEM = BLOCK_NITEM;
+  static const size_t FREE_CHUNK_NITEM = BLOCK_NITEM;// 256 
 
   // Free objects are batched in a FreeChunk before they're added to
   // global list(_free_chunks).
@@ -108,7 +108,7 @@ public:
   // items in the Block are only used by the thread.
   // To support cache-aligned objects, align Block.items by cacheline.
   struct BAIDU_CACHELINE_ALIGNMENT Block {
-    char items[sizeof(T) * BLOCK_NITEM];
+    char items[sizeof(T) * BLOCK_NITEM];//每个Block 都是一块连续内存 256*T 个这样的字节 就是 256个T
     size_t nitem;
 
     Block() : nitem(0) {}
@@ -173,6 +173,9 @@ public:
     ++_cur_block->nitem;                                                       \
     return obj;                                                                \
   }                                                                            \
+  
+  //去 _cur_block 中看有没有空闲，如果有则直接placement new即可，因为初始化的时候 _cur_block 是null，因此也拿不到
+  //此时就会去全局新建一个Block赋给 _cur_block 然后从cur_block里创建TestClass返回
   /* Fetch a Block from global */                                              \
   _cur_block = add_block(&_cur_block_index);                                   \
   if (_cur_block != NULL) {                                                    \
@@ -226,14 +229,13 @@ public:
   };
 
 
-
     // Create a Block and append it to right-most BlockGroup.
     static Block* add_block(size_t* index) {
-        Block* const new_block = new(std::nothrow) Block;//首先，尝试创建一个新的 Block 对象，将其地址赋值给 new_block。如果创建失败（内存分配失败），则返回 NULL。
+        Block* const new_block = new(std::nothrow) Block;//首先，尝试创建一个新的 Block 对象，将其地址赋值给 new_block 如果创建失败（内存分配失败），则返回 NULL。
         if (NULL == new_block) {
             return NULL;
         }
-        size_t ngroup;
+        size_t ngroup;//第一次的时候 _ngroup == 0 ;
         do {
             ngroup = _ngroup.load(std::memory_order_acquire);//a. 从 _ngroup 原子变量中加载当前的 block 组数量 ngroup，使用 std::memory_order_acquire 内存顺序模型。
             if (ngroup >= 1) {//如果 ngroup 大于等于 1，获取最后一个 block 组 g。
@@ -249,7 +251,7 @@ public:
                 }
                 g->nblock.fetch_sub(1, std::memory_order_relaxed);// 如果 block_index 不满足条件（即当前 block 组已满），使用 fetch_sub 函数将 block 组的 nblock 原子变量减 1，使用 std::memory_order_relaxed 内存顺序模型。
             }
-        } while (add_block_group(ngroup));
+        } while (add_block_group(ngroup));//ngroup == 0 会走这里
 
         // Fail to add_block_group.
         delete new_block;
@@ -339,7 +341,7 @@ private:
 
 
 
-    bool pop_free_chunk(FreeChunk& c) {// free_chunks 初始化时是空，只reserve了一个空间 所以 pop_free_chunk 也会失败，当不为空时候，会拿到一个free_chunk，然后拷贝到LocalPool的cur_free中
+    bool pop_free_chunk(FreeChunk& c) {// free_chunks 初始化时是空，只reserve了一个空间 所以 pop_free_chunk 也会失败，当不为空时候，会拿到一个 free_chunk 然后拷贝到LocalPool的cur_free中
         // Critical for the case that most return_object are called in
         // different threads of get_object.
         if (_free_chunks.empty()) {
@@ -354,7 +356,7 @@ private:
         _free_chunks.pop_back();
         pthread_mutex_unlock(&_free_chunks_mutex);
         c.nfree = p->nfree;
-        memcpy(c.ptrs, p->ptrs, sizeof(*p->ptrs) * p->nfree);
+        memcpy(c.ptrs, p->ptrs, sizeof(*p->ptrs) * p->nfree);//当不为空时候，会拿到一个 free_chunk 然后拷贝到LocalPool的 _cur_free 中
         free(p);
         return true;
     }
@@ -369,7 +371,7 @@ private:
   static pthread_mutex_t _change_thread_mutex;
   static pthread_mutex_t _block_group_mutex;
 
-  static std::atomic<BlockGroup*> _block_groups[OP_MAX_BLOCK_NGROUP];
+  static std::atomic<BlockGroup*> _block_groups[OP_MAX_BLOCK_NGROUP];//OP_MAX_BLOCK_NGROUP == 65535
 
   std::vector<DynamicFreeChunk*> _free_chunks;//一个存储空闲对象块的向量  其元素类型为指向 DynamicFreeChunk 类型的指针。这个向量用于存储空闲的动态内存块，即不再使用的 DynamicFreeChunk 对象。这样在需要新的空闲块时，可以从这个向量中获取，而不是分配新的内存。同样，在释放内存块时，可以将它们添加回这个向量，以便将来重用。这有助于减少内存分配和释放的开销。
   pthread_mutex_t _free_chunks_mutex;//互斥锁，用于保护 _free_chunks 的访问
