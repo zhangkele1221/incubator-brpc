@@ -4,13 +4,10 @@
 #include <algorithm> // std::max, std::min
 #include <iostream>  // std::ostream
 #include <pthread.h> // pthread_mutex_t
-
 #include <atomic>
 #include <vector>
 #include <mutex>
 #include <string.h>
-
-
 
 #define BAIDU_LIKELY(expr) (expr)
 #define BAIDU_UNLIKELY(expr) (expr)
@@ -73,14 +70,9 @@ public:
   static const size_t BLOCK_NITEM = ObjectPoolBlockItemNum<T>::value;//这个值表示每个块实际应包含的项目数量。
   static const size_t FREE_CHUNK_NITEM = BLOCK_NITEM;// 256 
 
-  // Free objects are batched in a FreeChunk before they're added to
-  // global list(_free_chunks).
   typedef ObjectPoolFreeChunk<T, FREE_CHUNK_NITEM> FreeChunk;
   typedef ObjectPoolFreeChunk<T, 0> DynamicFreeChunk;
 
-  // When a thread needs memory, it allocates a Block. To improve locality,
-  // items in the Block are only used by the thread.
-  // To support cache-aligned objects, align Block.items by cacheline.
   struct BAIDU_CACHELINE_ALIGNMENT Block {
     char items[sizeof(T) * BLOCK_NITEM];//每个Block 都是一块连续内存 256*T 个这样的字节 就是 256个T
     size_t nitem;
@@ -88,17 +80,11 @@ public:
     Block() : nitem(0) {}
   };
 
-  // An Object addresses at most OP_MAX_BLOCK_NGROUP BlockGroups,
-  // each BlockGroup addresses at most OP_GROUP_NBLOCK blocks. So an
-  // object addresses at most OP_MAX_BLOCK_NGROUP * OP_GROUP_NBLOCK Blocks.
   struct BlockGroup {
       std::atomic<size_t> nblock;
       std::atomic<Block*> blocks[OP_GROUP_NBLOCK];
 
       BlockGroup() : nblock(0) {
-          // We fetch_add nblock in add_block() before setting the entry,
-          // thus address_resource() may sees the unset entry. Initialize
-          // all entries to NULL makes such address_resource() return NULL.
           memset(static_cast<void*>(blocks), 0, sizeof(std::atomic<Block*>) * OP_GROUP_NBLOCK);
       }
   };
@@ -122,22 +108,13 @@ public:
 
     static void delete_local_pool(void *arg) { delete (LocalPool *)arg; }
 
-    // We need following macro to construct T with different CTOR_ARGS
-    // which may include parenthesis because when T is POD, "new T()"
-    // and "new T" are different: former one sets all fields to 0 which
-    // we don't want.
 #define BAIDU_OBJECT_POOL_GET(CTOR_ARGS)                                       \
-  /* Fetch local free ptr */                                                   \
   if (_cur_free.nfree) {                                                       \
     return _cur_free.ptrs[--_cur_free.nfree];                                  \
   }                                                                            \
-  /* Fetch a FreeChunk from global.                                            \
-     TODO: Popping from _free needs to copy a FreeChunk which is               \
-     costly, but hardly impacts amortized performance. */                      \
   if (_pool->pop_free_chunk(_cur_free)) {                                      \
     return _cur_free.ptrs[--_cur_free.nfree];                                  \
   }                                                                            \
-  /* Fetch memory from local block */                                          \
   if (_cur_block && _cur_block->nitem < BLOCK_NITEM) {                         \
     T *obj = new ((T *)_cur_block->items + _cur_block->nitem) T CTOR_ARGS;     \
     ++_cur_block->nitem;                                                       \
