@@ -1,8 +1,7 @@
 // 关键看懂 这个链接中的一张图 就大概掌握了  整个代码 https://blog.csdn.net/KIDGIN7439/article/details/120219052
 
-#include <algorithm> // std::max, std::min
-#include <iostream>  // std::ostream
-#include <pthread.h> // pthread_mutex_t
+#include <iostream>
+#include <pthread.h>
 #include <atomic>
 #include <vector>
 #include <mutex>
