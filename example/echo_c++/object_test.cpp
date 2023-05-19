@@ -318,6 +318,35 @@ namespace butil
             return -1;
         }
 
+        // Number of all allocated objects, including being used and free.
+        ObjectPoolInfo describe_objects() const {
+            ObjectPoolInfo info;
+            info.local_pool_num = _nlocal.load(std::memory_order_relaxed);
+            info.block_group_num = _ngroup.load(std::memory_order_acquire);
+            info.block_num = 0;
+            info.item_num = 0;
+            info.free_chunk_item_num = free_chunk_nitem();
+            info.block_item_num = BLOCK_NITEM;
+
+            for (size_t i = 0; i < info.block_group_num; ++i) {
+                BlockGroup* bg = _block_groups[i].load(std::memory_order_consume);
+                if (NULL == bg) {
+                    break;
+                }
+                size_t nblock = std::min(bg->nblock.load(std::memory_order_relaxed),
+                                        OP_GROUP_NBLOCK);
+                info.block_num += nblock;
+                for (size_t j = 0; j < nblock; ++j) {
+                    Block* b = bg->blocks[j].load(std::memory_order_consume);
+                    if (NULL != b) {
+                        info.item_num += b->nitem;
+                    }
+                }
+            }
+            info.total_size = info.block_num * info.block_item_num * sizeof(T);
+            return info;
+        }
+
         static inline ObjectPool *singleton()
         {
             ObjectPool *p = _singleton.load(std::memory_order_consume);
@@ -434,6 +463,21 @@ namespace butil
     template <typename T>
     std::atomic<typename ObjectPool<T>::BlockGroup *> ObjectPool<T>::_block_groups[OP_MAX_BLOCK_NGROUP] = {};
 
+
+    inline std::ostream& operator<<(std::ostream& os,
+                                ObjectPoolInfo const& info) {
+    return os << "local_pool_num: " << info.local_pool_num
+              << "\nblock_group_num: " << info.block_group_num
+              << "\nblock_num: " << info.block_num
+              << "\nitem_num: " << info.item_num
+              << "\nblock_item_num: " << info.block_item_num
+              << "\nfree_chunk_item_num: " << info.free_chunk_item_num
+              << "\ntotal_size: " << info.total_size;
+    }
+
+
+
+
 } // namespace butil
 
 namespace butil
@@ -468,10 +512,10 @@ namespace butil
         ObjectPool<T>::singleton()->clear_objects();
     }
 
-    /*
+    
     template <typename T> ObjectPoolInfo describe_objects() {
       return ObjectPool<T>::singleton()->describe_objects();
-    }*/
+    }
 
 }
 
@@ -482,6 +526,20 @@ struct MyObject
 
 int main()
 {
+
+    butil::ObjectPoolInfo info = butil::describe_objects<MyObject>();
+    butil::ObjectPoolInfo zero_info = { 0, 0, 0, 0, 3, 3, 0 };
+    //ASSERT_EQ(0, memcmp(&info, &zero_info, sizeof(info)));
+
+    if(memcmp(&info, &zero_info, sizeof(info))){
+        std::cout<<"notequl"<<std::endl;
+    }
+
+    MyObject* p1 = butil::get_object<MyObject>();
+    std::cout << butil::describe_objects<MyObject>() << std::endl;
+    butil::return_object(p1);
+    std::cout << butil::describe_objects<MyObject>() << std::endl;
+
 
     MyObject *p = butil::get_object<MyObject>();
     p->num = 100;
