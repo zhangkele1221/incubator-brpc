@@ -381,10 +381,10 @@ std::atomic<ObjectPool<T>*> ObjectPool<T>::_singleton = NULL;
 
 
 template <typename T>
-std::atomic<long> ObjectPool<T>::_nlocal = 0;
+std::atomic<long> ObjectPool<T>::_nlocal(0);
 
 template <typename T>
-std::atomic<size_t> ObjectPool<T>::_ngroup = 0;
+std::atomic<size_t> ObjectPool<T>::_ngroup(0);
 
 template <typename T>
 pthread_mutex_t ObjectPool<T>::_singleton_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -436,13 +436,14 @@ struct MyObject {
   int num;
 };
 
-int mian(){
+int mian()  {
 
     MyObject* p = butil::get_object<MyObject>();
     p->num = 100;
     std::cout<<p->num <<std::endl;
     butil::return_object(p);
     std::cout<<p->num <<std::endl;
+    return 0;
 
 }
 
