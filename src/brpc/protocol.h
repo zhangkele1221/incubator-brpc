@@ -91,7 +91,7 @@ struct Protocol {
     //     The message is parsed successfully and cut from `source'.
     typedef ParseResult (*Parse)(butil::IOBuf* source, Socket *socket,
                                  bool read_eof, const void *arg);
-    Parse parse;
+    Parse parse;// Parse 负责将消息从 source 上切割下来，client和server均会使用
 
     // [Required by client]
     // The callback to serialize `request' into `request_buf' which will be
@@ -126,7 +126,7 @@ struct Protocol {
     // destroyable.h
     // May be called in a different thread from parse().
     typedef void (*ProcessRequest)(InputMessageBase* msg);
-    ProcessRequest process_request;
+    ProcessRequest process_request;//ProcessRequest 处理server端parse返回的消息，只有server端会调用
 
     // [Required by client]
     // The callback to handle response `msg' created by a successful parse().

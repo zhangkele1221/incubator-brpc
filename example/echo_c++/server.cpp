@@ -16,7 +16,7 @@
 // under the License.
 
 // A server to receive EchoRequest and send back EchoResponse.
-
+//https://blog.csdn.net/KIDGIN7439/article/details/112243802 看这篇博客基本 searver流程都走通了.......
 #include <gflags/gflags.h>
 #include <butil/logging.h>
 #include <brpc/server.h>
@@ -106,7 +106,7 @@ int main(int argc, char* argv[]) {
     // Start the server.
     brpc::ServerOptions options;
     options.idle_timeout_sec = FLAGS_idle_timeout_s;
-    if (server.Start(point, &options) != 0) {
+    if (server.Start(point, &options) != 0) {//然后在demo中使用默认的ServerOption调用server.Start()，首先还是调用InitializeOnce，这里会直接返回。然后中间的逻辑在默认的option不会调用，直接到初始化bthread
         LOG(ERROR) << "Fail to start EchoServer";
         return -1;
     }

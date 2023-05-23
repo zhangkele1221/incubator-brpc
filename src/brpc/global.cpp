@@ -307,7 +307,7 @@ static void BaiduStreamingLogHandler(google::protobuf::LogLevel level,
     }
     CHECK(false) << filename << ':' << line << ' ' << message;
 }
-
+//在 GlobalInitializeOrDieImpl 内首先忽略掉 SIGPIPE 然后初始化SSL，注册 NamingService LoadBalancer CompressHandler
 static void GlobalInitializeOrDieImpl() {
     //////////////////////////////////////////////////////////////////
     // Be careful about usages of gflags inside this function which //
@@ -386,8 +386,8 @@ static void GlobalInitializeOrDieImpl() {
     if (RegisterCompressHandler(COMPRESS_TYPE_SNAPPY, snappy_compress) != 0) {
         exit(1);
     }
-
-    // Protocols
+    // 然后开始注册协议，brpc server一个端口支持多种协议，这里的协议都是指的是应用层协议，如baidu_std协议是基于tcp，以注册 baidu_std 协议为例
+    // Protocols  协议Protocol类是一个包含了多个函数指针的结构体
     Protocol baidu_protocol = { ParseRpcMessage,
                                 SerializeRequestDefault, PackRpcRequest,
                                 ProcessRpcRequest, ProcessRpcResponse,
@@ -579,7 +579,7 @@ static void GlobalInitializeOrDieImpl() {
 
     std::vector<Protocol> protocols;
     ListProtocols(&protocols);
-    for (size_t i = 0; i < protocols.size(); ++i) {
+    for (size_t i = 0; i < protocols.size(); ++i) {//注册完协议之后，遍历协议，将含有 process_response 的协议加入到client端InputMessenger的handler中
         if (protocols[i].process_response) {
             InputMessageHandler handler;
             // `process_response' is required at client side

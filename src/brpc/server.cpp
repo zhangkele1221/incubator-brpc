@@ -910,7 +910,7 @@ int Server::StartInternal(const butil::EndPoint& endpoint,
         _global_restful_map->PrepareForFinding();
     }
 
-    if (_options.num_threads > 0) {
+    if (_options.num_threads > 0) {//然后中间的逻辑在默认的option不会调用，直接到初始化bthread。
         if (FLAGS_usercode_in_pthread) {
             _options.num_threads += FLAGS_usercode_backup_threads;
         }
@@ -939,7 +939,7 @@ int Server::StartInternal(const butil::EndPoint& endpoint,
     }
 
     // Create listening ports
-    if (port_range.min_port > port_range.max_port) {
+    if (port_range.min_port > port_range.max_port) {//然后从min_port开始遍历到max_port直到找到一个可用的port，然后创建Acceptor
         LOG(ERROR) << "Invalid port_range=[" << port_range.min_port << '-'
                    << port_range.max_port << ']';
         return -1;
@@ -1194,13 +1194,13 @@ int Server::AddServiceInternal(google::protobuf::Service* service,
         return -1;
     }
     const google::protobuf::ServiceDescriptor* sd = service->GetDescriptor();
-    if (sd->method_count() == 0) {
+    if (sd->method_count() == 0) {//首先判断 注册的searver 中是否有 method 有得话直接返回
         LOG(ERROR) << "service=" << sd->full_name()
                    << " does not have any method.";
         return -1;
     }
 
-    if (InitializeOnce() != 0) {
+    if (InitializeOnce() != 0) {//然后调用InitializeOnce()只进行一次初始化，该函数实际调用的是GlobalInitializeOrDieImpl
         LOG(ERROR) << "Fail to initialize Server[" << version() << ']';
         return -1;
     }
@@ -1227,7 +1227,7 @@ int Server::AddServiceInternal(google::protobuf::Service* service,
     const bool is_idl_support = sd->file()->options().GetExtension(idl_support);
 
     Tabbed* tabbed = dynamic_cast<Tabbed*>(service);
-    for (int i = 0; i < sd->method_count(); ++i) {
+    for (int i = 0; i < sd->method_count(); ++i) {//然后回来到AddServiceInternal，接着判断当前注册的service是否注册过，没注册的话则注册service的所有method。
         const google::protobuf::MethodDescriptor* md = sd->method(i);
         MethodProperty mp;
         mp.is_builtin_service = is_builtin_service;
