@@ -1199,7 +1199,7 @@ int Server::AddServiceInternal(google::protobuf::Service* service,
                    << " does not have any method.";
         return -1;
     }
-
+    //// 初始化并注册：NamingService，LoadBalancer，CompressHandler，protocols等
     if (InitializeOnce() != 0) {//然后调用InitializeOnce()只进行一次初始化，该函数实际调用的是GlobalInitializeOrDieImpl
         LOG(ERROR) << "Fail to initialize Server[" << version() << ']';
         return -1;
