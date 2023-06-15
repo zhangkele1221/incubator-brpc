@@ -17,6 +17,7 @@
 
 // A server to receive EchoRequest and send back EchoResponse.
 //https://blog.csdn.net/KIDGIN7439/article/details/112243802 看这篇博客基本 searver流程都走通了.......
+//https://segmentfault.com/a/1190000042407045 同上
 #include <gflags/gflags.h>
 #include <butil/logging.h>
 #include <brpc/server.h>
