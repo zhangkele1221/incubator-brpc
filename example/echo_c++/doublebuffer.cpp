@@ -1,4 +1,8 @@
 
+#include <deque>
+#include <vector>                                       // std::vector
+#include <pthread.h>
+
 
 class Void {};
 
@@ -42,9 +46,60 @@ public:
 
   inline void EndRead() { pthread_mutex_unlock(&_mutex); }
 
-  inline void WaitReadDone() { BAIDU_SCOPED_LOCK(_mutex); }
+  inline void WaitReadDone() { BAIDU_SCOPED_LOCK(_mutex); }//  std::lock_guard<std::mutex> lock(mtx);
 
 private:
   DoublyBufferedData *_control;
   pthread_mutex_t _mutex;
 };
+
+
+
+
+
+template <typename T, typename TLS = Void>
+class DoublyBufferedData {
+
+    class Wrapper;
+
+    typedef int WrapperTLSId;
+
+
+
+    // Foreground and background void.
+    T _data[2];
+
+    // Index of foreground instance.
+    std::atomic<int> _index;
+
+    // Key to access thread-local wrappers.
+    WrapperTLSId _wrapper_key;
+
+    // All thread-local instances.
+    std::vector<Wrapper*> _wrappers;
+
+    // Sequence access to _wrappers.
+    pthread_mutex_t _wrappers_mutex;
+
+    // Sequence modifications.
+    pthread_mutex_t _modify_mutex;
+};
+
+
+
+template <typename T, typename TLS>
+DoublyBufferedData<T, TLS>::DoublyBufferedData()
+    : _index(0)
+    , _wrapper_key(0) {
+    _wrappers.reserve(64);
+    pthread_mutex_init(&_modify_mutex, NULL);
+    pthread_mutex_init(&_wrappers_mutex, NULL);
+    _wrapper_key = WrapperTLSGroup::key_create();
+    // Initialize _data for some POD types. This is essential for pointer
+    // types because they should be Read() as NULL before any Modify().
+    if (is_integral<T>::value || is_floating_point<T>::value ||
+        is_pointer<T>::value || is_member_function_pointer<T>::value) {
+        _data[0] = T();
+        _data[1] = T();
+    }
+}
