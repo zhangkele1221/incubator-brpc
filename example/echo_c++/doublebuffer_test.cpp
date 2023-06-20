@@ -18,6 +18,8 @@ int main(){
 
     butil::DoublyBufferedData<Foo> data[PTHREAD_KEYS_MAX + 1];
     butil::DoublyBufferedData<Foo>::ScopedPtr ptr;
+    std::cout<<data[PTHREAD_KEYS_MAX].Read(&ptr)<<std::endl;
+    std::cout<<ptr->x<<std::endl;
 
     return 1;
 }
