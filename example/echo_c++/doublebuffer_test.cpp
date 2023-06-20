@@ -4,6 +4,7 @@
 //  动态库编译方法
 //g++ doublebuffer_test.cpp  -I/workspace/incubator-brpc/output/include   -L/workspace/incubator-brpc/output/lib -lbrpc  -o your_program 
 // export LD_LIBRARY_PATH=/path/to/brpc/output/lib:$LD_LIBRARY_PATH  环境变量制定动态库的路径
+// export LD_LIBRARY_PATH=/workspace/incubator-brpc/output/lib:$LD_LIBRARY_PATH 
 //#include "../../src/butil/DoublyBufferedData.h"
 #include <butil/containers/doubly_buffered_data.h>
 
