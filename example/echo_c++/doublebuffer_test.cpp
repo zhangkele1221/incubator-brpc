@@ -8,8 +8,9 @@
 //#include "../../src/butil/DoublyBufferedData.h"
 #include <butil/containers/doubly_buffered_data.h>
 
+static int i =0;
 struct Foo {
-    Foo() : x(0) {}
+    Foo() : x(0) {std::cout<<"xxxx"<<i++<<std::endl;}
     int x;
 };
 
