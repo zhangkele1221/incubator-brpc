@@ -3,7 +3,7 @@
 #include <pthread.h>
 #include <atomic>
 #include <vector>
-
+#include <deque>
 
 
 class Void { };
@@ -193,8 +193,16 @@ DoublyBufferedData<T, TLS>::~DoublyBufferedData() {
 template <typename T, typename TLS>
 class DoublyBufferedData<T, TLS>::WrapperTLSGroup {// 这个类型毛事没有 构造函数 自定义的 里面基本都是 static 函数和成员变量
 public:
-    const static size_t RAW_BLOCK_SIZE = 4096;
-    const static size_t ELEMENTS_PER_BLOCK = (RAW_BLOCK_SIZE + sizeof(T) - 1) / sizeof(T);
+    const static size_t RAW_BLOCK_SIZE = 4096;//RAW_BLOCK_SIZE 定义了原始块的大小，通常以字节为单位。在这个例子中，它是 4096 字节
+    //RAW_BLOCK_SIZE + sizeof(T) - 1：加上 sizeof(T) - 1 是一个常见的技巧，
+    //用于确保当 RAW_BLOCK_SIZE 不是 sizeof(T) 的整数倍时，结果会向上取整到最接近的 sizeof(T) 的倍数。
+    //这是通过整数除法的截断行为来实现的。(RAW_BLOCK_SIZE + sizeof(T) - 1) / sizeof(T)：
+    //最后，通过除以 sizeof(T) 来计算每个块可以容纳的元素数量。由于这是整数除法，结果会自动向下取整。
+    // 这种计算的目的是确保每个块的大小（以字节为单位）是类型 T 大小的整数倍，以避免内存对齐问题。
+    // 举个简单的例子，假设 RAW_BLOCK_SIZE 是 10，sizeof(T) 是 4。
+    //如果你简单地做 10 / 4，你得到2，这意味着你可能会浪费一些空间。
+    //使用这个技巧，ELEMENTS_PER_BLOCK 会计算为 (10 + 4 - 1) / 4，即 13 / 4，结果是3，这样就没有浪费空间，并且可以更有效地使用内存块。
+    const static size_t ELEMENTS_PER_BLOCK = (RAW_BLOCK_SIZE + sizeof(T) - 1) / sizeof(T);//常量 表示每个块可以容纳的元素数量。
 
     struct BAIDU_CACHELINE_ALIGNMENT ThreadBlock {
         inline DoublyBufferedData::Wrapper* at(size_t offset) {
@@ -202,7 +210,7 @@ public:
         };
 
     private:
-        DoublyBufferedData::Wrapper _data[ELEMENTS_PER_BLOCK];
+        DoublyBufferedData::Wrapper _data[ELEMENTS_PER_BLOCK];//元素数量
     };
 
     inline static WrapperTLSId key_create() {
@@ -238,9 +246,9 @@ public:
                 LOG(FATAL) << "Fail to create vector, " << berror();
                 return NULL;
             }
-            butil::thread_atexit(_destroy_tls_blocks);
+            butil::thread_atexit(_destroy_tls_blocks);//该函数在线程退出时被调用，以清理线程局部存储
         }
-        const size_t block_id = (size_t)id / ELEMENTS_PER_BLOCK;
+        const size_t block_id = (size_t)id / ELEMENTS_PER_BLOCK;//计算给定的ID应该位于哪个块。这是通过简单地将ID除以每个块的元素数量来实现的。因为这里使用的是整数除法，结果会自动向下取整。
         if (block_id >= _s_tls_blocks->size()) {
             // The 32ul avoid pointless small resizes.
             _s_tls_blocks->resize(std::max(block_id + 1, 32ul));
@@ -254,7 +262,7 @@ public:
             tb = new_block;
             (*_s_tls_blocks)[block_id] = new_block;
         }
-        return tb->at(id - block_id * ELEMENTS_PER_BLOCK);
+        return tb->at(id - block_id * ELEMENTS_PER_BLOCK);//用id -  块id*块容量    计算了在块内的索引位置
     }
 
 private:
@@ -303,6 +311,61 @@ __thread std::vector<typename DoublyBufferedData<T, TLS>::WrapperTLSGroup::Threa
         DoublyBufferedData<T, TLS>::WrapperTLSGroup::_s_tls_blocks = NULL;
 
 
+
+/*
+这段代码的意义在于，它定义了一个模板类 DoublyBufferedDataWrapperBase
+这个类一般接受两个类型参数。但是，当第二个类型参数是特定的类型Void时，类的定义是特化的。
+模板特化是模板编程中的一个重要概念，允许为模板的某些特定参数提供不同的实现。
+在这个例子中，当 DoublyBufferedDataWrapperBase 的第二个模板参数是Void时，
+类没有任何成员，而其他情况下，它有一个成员变量和一个成员函数。
+*/
+template <typename T, typename TLS> class DoublyBufferedDataWrapperBase {
+public:
+  TLS &user_tls() { return _user_tls; }
+
+protected:
+  TLS _user_tls;
+};
+
+template <typename T> class DoublyBufferedDataWrapperBase<T, Void> {};
+
+
+template <typename T, typename TLS>
+class DoublyBufferedData<T, TLS>::Wrapper : public DoublyBufferedDataWrapperBase<T, TLS> {
+
+    friend class DoublyBufferedData;
+    
+public:
+    explicit Wrapper() : _control(NULL) {
+        pthread_mutex_init(&_mutex, NULL);
+    }
+    
+    ~Wrapper() {
+        if (_control != NULL) {
+            _control->RemoveWrapper(this);
+        }
+        pthread_mutex_destroy(&_mutex);
+    }
+
+    // _mutex will be locked by the calling pthread and DoublyBufferedData.
+    // Most of the time, no modifications are done, so the mutex is
+    // uncontended and fast.
+    inline void BeginRead() {
+        pthread_mutex_lock(&_mutex);
+    }
+
+    inline void EndRead() {
+        pthread_mutex_unlock(&_mutex);
+    }
+
+    inline void WaitReadDone() {
+        BAIDU_SCOPED_LOCK(_mutex);
+    }
+    
+private:
+    DoublyBufferedData* _control;
+    pthread_mutex_t _mutex;
+};
 
 
 
