@@ -184,14 +184,36 @@ DoublyBufferedData<T, TLS>::~DoublyBufferedData() {
     pthread_mutex_destroy(&_wrappers_mutex);
 }
 
-
+// Called when thread initializes thread-local wrapper.
+template <typename T, typename TLS>
+typename DoublyBufferedData<T, TLS>::Wrapper* 
+DoublyBufferedData<T, TLS>::AddWrapper(typename DoublyBufferedData<T, TLS>::Wrapper* w) {
+    if (NULL == w) {
+        return NULL;
+    }
+    if (w->_control == this) {//这什么意思 没有搞明白
+        return w;
+    }
+    if (w->_control != NULL) {
+        LOG(FATAL) << "Get wrapper from tls but control != this";
+        return NULL;
+    }
+    try {
+        w->_control = this;
+        BAIDU_SCOPED_LOCK(_wrappers_mutex);
+        _wrappers.push_back(w);
+    } catch (std::exception& e) {
+        return NULL;
+    }
+    return w;
+}
 
 // Use pthread_key store data limits by _SC_THREAD_KEYS_MAX.
 // WrapperTLSGroup can store Wrapper in thread local storage.
 // WrapperTLSGroup will destruct Wrapper data when thread exits,
 // other times only reset Wrapper inner structure.
 template <typename T, typename TLS>
-class DoublyBufferedData<T, TLS>::WrapperTLSGroup {// 这个类型毛事没有 构造函数 自定义的 里面基本都是 static 函数和成员变量
+class DoublyBufferedData<T, TLS>::WrapperTLSGroup {  // 这个类型毛事没有 构造函数 自定义的 里面基本都是 static 函数和成员变量
 public:
     const static size_t RAW_BLOCK_SIZE = 4096;//RAW_BLOCK_SIZE 定义了原始块的大小，通常以字节为单位。在这个例子中，它是 4096 字节
     //RAW_BLOCK_SIZE + sizeof(T) - 1：加上 sizeof(T) - 1 是一个常见的技巧，
@@ -210,7 +232,7 @@ public:
         };
 
     private:
-        DoublyBufferedData::Wrapper _data[ELEMENTS_PER_BLOCK];//元素数量
+        DoublyBufferedData::Wrapper _data[ELEMENTS_PER_BLOCK];//表示每个块种的元素数量
     };
 
     inline static WrapperTLSId key_create() {
@@ -262,6 +284,10 @@ public:
             tb = new_block;
             (*_s_tls_blocks)[block_id] = new_block;
         }
+        // 整个数据结构是由多个块组成的， （__thread std::vector<ThreadBlock*>* _s_tls_blocks;） 
+        // 每个块包含 ELEMENTS_PER_BLOCK 个元素。（ DoublyBufferedData::Wrapper _data[ELEMENTS_PER_BLOCK];）
+        // 给定一个 id，我们可以找出它属于哪个块（block_id），以及在那个块内的位置。
+        // 还是那句话 id 是个全局的 索引
         return tb->at(id - block_id * ELEMENTS_PER_BLOCK);//用id -  块id*块容量    计算了在块内的索引位置
     }
 
@@ -291,7 +317,7 @@ private:
     static pthread_mutex_t _s_mutex;
     static WrapperTLSId _s_id;
     static std::deque<WrapperTLSId>* _s_free_ids;
-    static __thread std::vector<ThreadBlock*>* _s_tls_blocks;
+    static __thread std::vector<ThreadBlock*>* _s_tls_blocks;//每个线程 独有的
 };
 
 
@@ -329,13 +355,13 @@ protected:
 
 template <typename T> class DoublyBufferedDataWrapperBase<T, Void> {};
 
-
+//tls锁及用户数据Wrapper
 template <typename T, typename TLS>
 class DoublyBufferedData<T, TLS>::Wrapper : public DoublyBufferedDataWrapperBase<T, TLS> {
 
     friend class DoublyBufferedData;
     
-public:
+    public:
     explicit Wrapper() : _control(NULL) {
         pthread_mutex_init(&_mutex, NULL);
     }
@@ -373,7 +399,7 @@ private:
 
 template <typename T, typename TLS>
 int DoublyBufferedData<T, TLS>::Read(typename DoublyBufferedData<T, TLS>::ScopedPtr* ptr) {
-    Wrapper* p = WrapperTLSGroup::get_or_create_tls_data(_wrapper_key);
+    Wrapper* p = WrapperTLSGroup::get_or_create_tls_data(_wrapper_key);//这就是用_wrapper_key 找到 DoublyBufferedData::Wrapper _data[ELEMENTS_PER_BLOCK];的元素偏移地址
     Wrapper* w = AddWrapper(p);
     if (BAIDU_LIKELY(w != NULL)) {
         w->BeginRead();
