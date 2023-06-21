@@ -14,6 +14,12 @@ class DoublyBufferedData {
     class WrapperTLSGroup;
     typedef int WrapperTLSId;
 public:
+    /*
+        ScopedPtr可以理解为一个带锁的指针，
+        通过Read函数读取数据后会把当前前台数据的指针和当前线程的 wrapper 指针保存到ScopedPtr里，
+        可以通过它来获取数据和用户侧tls变量，并且通过wrapper进行同步，一旦使用ScopedPtr发起了读，
+        只要ScopedPtr还存活，当前wrapper就是上锁的状态，因为解锁在析构函数里，这可以确保读取过程当前在读取的数据不被修改。
+    */
     class ScopedPtr {
     friend class DoublyBufferedData;
     public:
@@ -209,10 +215,11 @@ DoublyBufferedData<T, TLS>::AddWrapper(typename DoublyBufferedData<T, TLS>::Wrap
     return w;
 }
 
-// Use pthread_key store data limits by _SC_THREAD_KEYS_MAX.
-// WrapperTLSGroup can store Wrapper in thread local storage.
-// WrapperTLSGroup will destruct Wrapper data when thread exits,
-// other times only reset Wrapper inner structure.
+
+// 使用 pthread_key 存储数据受到 _SC_THREAD_KEYS_MAX 的限制。
+// WrapperTLSGroup 可以在线程本地存储中存储 Wrapper 
+// 当线程退出时 WrapperTLSGroup 将销毁 Wrapper 数据，
+// 其他时间只重置 Wrapper 内部结构。"
 template <typename T, typename TLS>
 class DoublyBufferedData<T, TLS>::WrapperTLSGroup {  // 这个类型毛事没有 构造函数 自定义的 里面基本都是 static 函数和成员变量
 public:
@@ -357,11 +364,11 @@ protected:
 template <typename T> class DoublyBufferedDataWrapperBase<T, Void> {};
 
 //tls锁及用户数据Wrapper
-//Wrapper继承自DoublyBufferedDataWrapperBase，成员变量有两个，
-//所属的DoublyBufferedData指针_control和一个互斥锁_mutex。
+//Wrapper继承自 DoublyBufferedDataWrapperBase 成员变量有两个，
+//所属的DoublyBufferedData指针 _control 和一个互斥锁 _mutex。
 //这个互斥锁在读的时候以及更新数据的时候都要用到。
-//BeginRead()和EndRead()都是供读线程使用，BeginRead()在读数据之前被调用，
-//EndRead()在ScopedPtr的析构函数里被调用，WaitReadDone()
+//BeginRead()和EndRead()都是供读线程使用 BeginRead()在读数据之前被调用，
+//EndRead()在ScopedPtr的析构函数里被调用 WaitReadDone()
 //则是在修改的时候被修改线程调用，这几个函数都是对锁的操作。
 template <typename T, typename TLS>
 class DoublyBufferedData<T, TLS>::Wrapper : public DoublyBufferedDataWrapperBase<T, TLS> {
@@ -403,7 +410,9 @@ private:
 
 
 
-
+//DBD的读基于ScopedPtr，读的时候首先去尝试获取tls的wrapper，
+//如果没获取到，则需要新建并加入全局wrapper列表，获取到wrapper后，
+//执行BeginRead加tls读锁，随后进行读取，Read只会加锁不会释放锁，ScopedPtr销毁的时候才会释放。
 template <typename T, typename TLS>
 int DoublyBufferedData<T, TLS>::Read(typename DoublyBufferedData<T, TLS>::ScopedPtr* ptr) {
     Wrapper* p = WrapperTLSGroup::get_or_create_tls_data(_wrapper_key);//这就是用_wrapper_key 找到 DoublyBufferedData::Wrapper _data[ELEMENTS_PER_BLOCK];的元素偏移地址
@@ -418,18 +427,25 @@ int DoublyBufferedData<T, TLS>::Read(typename DoublyBufferedData<T, TLS>::Scoped
 }
 
 
+/*
+首先是获得修改锁，然后调用fn修改后台数据，如果修改失败就直接返回了。
+修改完之后反转index，这里用的是release内存序，可以保证读线程一旦读到了新的index，
+数据的修改也一定可见，在这个操作之后，所有的read获得的就是修改后的新前台数据了，
+然后依次调用所有wrapper的WaitReadDone（），其实就是挨个每获取完一个锁就释放，
+确保在index反转之前的所有读取都已经结束，这个循环过后当前的后台数据就没有线程在用了，可以安全修改，再次调用fn
+*/
 
-
+//总的来说，这个 Modify 方法允许你在一个双缓冲的数据结构上安全地执行修改操作，而不会阻止读取操作。这在多线程环境中是非常有用的，尤其是当读取操作远远多于写入操作时。
 template <typename T, typename TLS>
 template <typename Fn>
 size_t DoublyBufferedData<T, TLS>::Modify(Fn& fn) {
     //"_modify_mutex 用于对修改进行排序。
     //使用一个单独的互斥锁而不是 _wrappers_mutex 是为了避免阻塞那些调用 AddWrapper() 或 RemoveWrapper() 的线程过长时间。
     //大多数时候，修改是由一个线程完成的，竞争应该可以忽略不计。"
-    BAIDU_SCOPED_LOCK(_modify_mutex);
-    int bg_index = !_index.load(butil::memory_order_relaxed);
+    BAIDU_SCOPED_LOCK(_modify_mutex); //以确保同一时间只有一个线程可以修改数据
+    int bg_index = !_index.load(butil::memory_order_relaxed);//这一行计算后台缓冲区的索引。_index 通常是一个原子变量，存储当前正在使用的缓冲区（前景）的索引。背景缓冲区是另一个，我们通过简单地取反来计算它。
     //"背景实例不会被其他线程访问，因此可以安全地进行修改。"
-    const size_t ret = fn(_data[bg_index]);
+    const size_t ret = fn(_data[bg_index]);//对背景缓冲区的数据执行修改，并存储返回的结果。fn 应该是一个可调用对象，接受数据类型 T 的引用作为参数。
     if (!ret) {
         return 0;
     }
@@ -437,9 +453,9 @@ size_t DoublyBufferedData<T, TLS>::Modify(Fn& fn) {
     
     // "发布，交换背景和前景实例。释放栅栏与 UnsafeRead() 中的获取栅栏匹配，
     //以确保刚开始读取新的前景实例的读取者能够看到在 fn 中所做的所有更改。"
-    // UnsafeRead  return _data + _index.load(std::memory_order_acquire); 
-    _index.store(bg_index, butil::memory_order_release);
-    bg_index = !bg_index;
+    // UnsafeRead  return _data + _index.load(std::memory_order_acquire);  这一点很重要.....
+    _index.store(bg_index, butil::memory_order_release);//发布更改，将 _index 设置为背景缓冲区的索引，从而将其切换到前景。这里使用的内存顺序保证，在发布更改之前，对背景缓冲区的更改对其他线程是可见的。
+    bg_index = !bg_index;//重新计算背景缓冲区的索引，因为我们刚刚切换了它们。
     
     //"等待直到所有线程完成当前的读取。当它们开始下一次读取时，它们应该能看到更新后的 _index "
     {
@@ -449,7 +465,8 @@ size_t DoublyBufferedData<T, TLS>::Modify(Fn& fn) {
         }
     }
 
-    const size_t ret2 = fn(_data[bg_index]);
+    const size_t ret2 = fn(_data[bg_index]);//再次调用函数对象 fn，对新的背景缓冲区的数据执行相同的修改。 说白了就是之前是前台的数据..
+    //简单来说，这行代码是在确认两次修改操作（前后台切换前和切换后）的结果是否一致，并在不一致的情况下输出错误信息并终止程序。
     CHECK_EQ(ret2, ret) << "index=" << _index.load(butil::memory_order_relaxed);
     return ret2;
 }
@@ -468,3 +485,12 @@ size_t DoublyBufferedData<T, TLS>::Modify(Fn& fn, const Arg1& arg1) {
 
 
 
+
+/*
+1.修改没有使用std::function之类的新特性应该是考虑到兼容性。
+2.如果先执行读后执行修改要小心死锁，因为ScopedPtr在读之后只要还在生命周期锁就不会释放，此时进行修改就会死锁。
+3.tls锁存在的主要意义是前后台数据切换后能比较迅速地安全修改后台数据（没人在继续读已经切到后台的数据），另外一种常见方案是没有锁，sleep一段时间再修改，确保新后台不再被检索线程访问。
+4.比较适合读取速度快的场景，如果读取时间很长修改很容易被阻塞。
+
+https://blog.csdn.net/wxj1992/article/details/117454485
+*/
