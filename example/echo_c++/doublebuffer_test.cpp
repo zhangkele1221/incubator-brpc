@@ -7,6 +7,11 @@
 // export LD_LIBRARY_PATH=/path/to/brpc/output/lib:$LD_LIBRARY_PATH  环境变量制定动态库的路径
 // export LD_LIBRARY_PATH=/workspace/incubator-brpc/output/lib:$LD_LIBRARY_PATH 
 //#include "../../src/butil/DoublyBufferedData.h"
+
+//本地
+//g++ doublebuffer_test.cpp  -I/root/learing/incubator-brpc/output/include   -L/root/learing/incubator-brpc/output/lib -lbrpc  -o your_program 
+// export LD_LIBRARY_PATH=/root/learing/incubator-brpc/output/lib:$LD_LIBRARY_PATH 
+
 #include <butil/containers/doubly_buffered_data.h>
 
 

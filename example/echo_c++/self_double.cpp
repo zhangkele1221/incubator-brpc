@@ -120,8 +120,9 @@ private:
         const Arg2& _arg2;
     };
 
-    const T* UnsafeRead() const
-    { return _data + _index.load(std::memory_order_acquire); }
+    const T* UnsafeRead() const{ 
+        return _data + _index.load(std::memory_order_acquire); 
+    }
     Wrapper* AddWrapper(Wrapper*);
     void RemoveWrapper(Wrapper*);
 
@@ -373,9 +374,9 @@ class DoublyBufferedData<T, TLS>::Wrapper : public DoublyBufferedDataWrapperBase
         pthread_mutex_destroy(&_mutex);
     }
 
-    // _mutex will be locked by the calling pthread and DoublyBufferedData.
-    // Most of the time, no modifications are done, so the mutex is
-    // uncontended and fast.
+    // _mutex 将被调用 pthread 和 DoublyBufferedData 锁定。
+    // 大多数时候，没有进行任何修改，所以互斥体是
+    // 无竞争且快速。
     inline void BeginRead() {
         pthread_mutex_lock(&_mutex);
     }
@@ -409,6 +410,54 @@ int DoublyBufferedData<T, TLS>::Read(typename DoublyBufferedData<T, TLS>::Scoped
     }
     return -1;
 }
+
+
+
+
+template <typename T, typename TLS>
+template <typename Fn>
+size_t DoublyBufferedData<T, TLS>::Modify(Fn& fn) {
+    //"_modify_mutex 用于对修改进行排序。
+    //使用一个单独的互斥锁而不是 _wrappers_mutex 是为了避免阻塞那些调用 AddWrapper() 或 RemoveWrapper() 的线程过长时间。
+    //大多数时候，修改是由一个线程完成的，竞争应该可以忽略不计。"
+    BAIDU_SCOPED_LOCK(_modify_mutex);
+    int bg_index = !_index.load(butil::memory_order_relaxed);
+    //"背景实例不会被其他线程访问，因此可以安全地进行修改。"
+    const size_t ret = fn(_data[bg_index]);
+    if (!ret) {
+        return 0;
+    }
+
+    
+    // "发布，交换背景和前景实例。释放栅栏与 UnsafeRead() 中的获取栅栏匹配，
+    //以确保刚开始读取新的前景实例的读取者能够看到在 fn 中所做的所有更改。"
+    // UnsafeRead  return _data + _index.load(std::memory_order_acquire); 
+    _index.store(bg_index, butil::memory_order_release);
+    bg_index = !bg_index;
+    
+    //"等待直到所有线程完成当前的读取。当它们开始下一次读取时，它们应该能看到更新后的 _index "
+    {
+        BAIDU_SCOPED_LOCK(_wrappers_mutex);
+        for (size_t i = 0; i < _wrappers.size(); ++i) {
+            _wrappers[i]->WaitReadDone();
+        }
+    }
+
+    const size_t ret2 = fn(_data[bg_index]);
+    CHECK_EQ(ret2, ret) << "index=" << _index.load(butil::memory_order_relaxed);
+    return ret2;
+}
+
+
+template <typename T, typename TLS>
+template <typename Fn, typename Arg1>
+size_t DoublyBufferedData<T, TLS>::Modify(Fn& fn, const Arg1& arg1) {
+    Closure1<Fn, Arg1> c(fn, arg1);
+    return Modify(c);
+}
+
+
+
 
 
 
