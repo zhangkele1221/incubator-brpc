@@ -357,6 +357,12 @@ protected:
 template <typename T> class DoublyBufferedDataWrapperBase<T, Void> {};
 
 //tls锁及用户数据Wrapper
+//Wrapper继承自DoublyBufferedDataWrapperBase，成员变量有两个，
+//所属的DoublyBufferedData指针_control和一个互斥锁_mutex。
+//这个互斥锁在读的时候以及更新数据的时候都要用到。
+//BeginRead()和EndRead()都是供读线程使用，BeginRead()在读数据之前被调用，
+//EndRead()在ScopedPtr的析构函数里被调用，WaitReadDone()
+//则是在修改的时候被修改线程调用，这几个函数都是对锁的操作。
 template <typename T, typename TLS>
 class DoublyBufferedData<T, TLS>::Wrapper : public DoublyBufferedDataWrapperBase<T, TLS> {
 
