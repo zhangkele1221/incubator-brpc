@@ -4,30 +4,43 @@
 #include <vector>
 #include <functional>
 #include <memory>
+#include <algorithm>
+
+#include <chrono>
+#include <atomic>
+
+
 
 template<typename DataType, typename ThreadLocalDataType = int>
-class DoublyBufferedData {
+class DoublyBufferedData_self {
 public:
-    DoublyBufferedData() : frontData(std::make_shared<DataType>()), backData(std::make_shared<DataType>()) {}
+    DoublyBufferedData_self() : frontData(std::make_shared<DataType>()), backData(std::make_shared<DataType>()) {}
 
     class ScopedPtr {
     public:
-        ScopedPtr(std::shared_ptr<DataType> data, std::mutex& mtx) : data(data), lock(mtx) {}
+        ScopedPtr(std::shared_ptr<DataType> data, std::unique_lock<std::mutex>&& lock) : data(data), lock(std::move(lock)) {}
+        
+        // Move constructor
+        ScopedPtr(ScopedPtr&& other) : data(std::move(other.data)), lock(std::move(other.lock)) {}
+
+        // Delete copy constructor
+        ScopedPtr(const ScopedPtr&) = delete;
+
         DataType* operator->() const { return data.get(); }
 
     private:
         std::shared_ptr<DataType> data;
-        std::lock_guard<std::mutex> lock;
+        std::unique_lock<std::mutex> lock;
     };
 
     ScopedPtr Read() {
-        std::lock_guard<std::mutex> lock(mutex);
-        return ScopedPtr(frontData, mutex);
+        std::unique_lock<std::mutex> lock(mutex);
+        return ScopedPtr(frontData, std::move(lock));
     }
 
     void Modify(std::function<void(DataType&)> modifyFunc) {
-        std::lock_guard<std::mutex> dataLock(dataMutex);
-        std::lock_guard<std::mutex> lock(mutex);
+        std::unique_lock<std::mutex> dataLock(dataMutex);
+        std::unique_lock<std::mutex> lock(mutex);
 
         modifyFunc(*backData);
 
@@ -45,16 +58,16 @@ public:
     }
 
     ThreadLocalDataType& GetLocalData() {
-        return localData.local();
+        return localDataStorage;
     }
 
     void AddWrapper(std::mutex& mtx) {
-        std::lock_guard<std::mutex> lock(mutex);
+        std::unique_lock<std::mutex> lock(mutex);
         wrapperMutexes.push_back(mtx);
     }
 
     void RemoveWrapper(std::mutex& mtx) {
-        std::lock_guard<std::mutex> lock(mutex);
+        std::unique_lock<std::mutex> lock(mutex);
         wrapperMutexes.erase(std::remove(wrapperMutexes.begin(), wrapperMutexes.end(), mtx), wrapperMutexes.end());
     }
 
@@ -64,24 +77,28 @@ private:
     std::mutex dataMutex;
     std::mutex mutex;
     std::vector<std::mutex> wrapperMutexes;
-    thread_local ThreadLocalDataType localDataStorage;
-    std::reference_wrapper<thread_local ThreadLocalDataType> localData{localDataStorage};
+    static thread_local ThreadLocalDataType localDataStorage;
 };
 
-int main() {
-    DoublyBufferedData<int> data;
+// 需要在类外初始化静态成员变量
+template<typename DataType, typename ThreadLocalDataType>
+thread_local ThreadLocalDataType DoublyBufferedData_self<DataType, ThreadLocalDataType>::localDataStorage;
 
-    // Example: Reading data
-    auto readData = data.Read();
-    std::cout << "Read data: " << *readData << std::endl;
+
+
+int main() {
+
+    DoublyBufferedData_self<int> data;
 
     // Example: Modifying data
     data.Modify([](int& x) {
         x = 5;
     });
 
-    readData = data.Read();
-    std::cout << "Read data after modification: " << *readData << std::endl;
+    // Example: Reading data
+    auto readData = data.Read();
+    std::cout << "Read data after modification: " << *(readData.operator->()) << std::endl;
 
     return 0;
 }
+
