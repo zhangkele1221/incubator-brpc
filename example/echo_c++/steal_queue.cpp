@@ -93,8 +93,8 @@ public:
         _bottom.store(b, std::memory_order_relaxed);
         return popped;
     }
-
-    //这个方法的目的是从队列的底部窃取任务，而不会与从队列的顶部弹出任务的其他线程发生冲突。请注意，此方法是线程安全的，并且可以与其他线程的push，pop和steal操作并行执行。
+    // 底部下标值比上面的大.
+    // 这个方法的目的是从队列的底部窃取任务，而不会与从队列的顶部弹出任务的其他线程发生冲突。请注意，此方法是线程安全的，并且可以与其他线程的push，pop和steal操作并行执行。
     // 从队列中窃取一个项。
     // 如果成功窃取，则返回true。
     // 可能与push()、pop()或另一个steal()并行执行。
@@ -126,6 +126,8 @@ public:
         } while (!_top.compare_exchange_strong(t, t + 1,
                                                std::memory_order_seq_cst,
                                                std::memory_order_relaxed));
+        //如果返回 true 这意味着 _top 的值与 t 相等，并且已成功地将 _top 的值设置为 t + 1
+        //如果返回 false 这意味着 _top 的值与 t 不相等。此时，t 变量将被设置为 _top 的当前值，以便你可以选择重试或执行其他操作。
         return true;
     }
 
