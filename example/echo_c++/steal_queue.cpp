@@ -106,11 +106,14 @@ public:
         size_t b = _bottom.load(std::memory_order_acquire);
         //如果_top大于或等于_bottom，说明队列是空的或者没有可以被窃取的任务。在这种情况下，方法立即返回false。
         if (t >= b) {
+            LOG(INFO) <<"_bottom == _top";
             // 为了性能考虑，允许出现假负（false negative）。
             return false;
         }
+        LOG(INFO) <<" t "<<t<<" b "<<b;
         //是一个尝试窃取任务的循环
         do {
+            LOG(INFO) <<" do-while ";
             //这是一个内存栅，它阻止了编译器和处理器对内存操作的重排序，以确保一致的内存顺序。
             std::atomic_thread_fence(std::memory_order_seq_cst);
             //再次加载 _bottom 的值，以检查是否有新任务被推入。
@@ -128,6 +131,8 @@ public:
                                                std::memory_order_relaxed));
         //如果返回 true 这意味着 _top 的值与 t 相等，并且已成功地将 _top 的值设置为 t + 1
         //如果返回 false 这意味着 _top 的值与 t 不相等。此时，t 变量将被设置为 _top 的当前值，以便你可以选择重试或执行其他操作。
+        
+        LOG(INFO) <<"WorkStealingQueue steal ok";
         return true;
     }
 
@@ -170,10 +175,49 @@ void* steal_thread(void* arg) {
         if (q->steal(&val)) {
             stolen->push_back(val);
         } else {
+            LOG(INFO) <<".....pause .....";
             asm volatile("pause\n": : :"memory");//是一个优化的暂停指令，通常用于多线程编程，特别是在自旋锁的情况下。通过使用 pause 指令，它可以提高性能和降低处理器的功耗。
         }
+        LOG(INFO) <<"steal_thread .....";
     }
     return stolen;
+}
+
+void* push_thread(void* arg) {
+    size_t npushed = 0;
+    value_type seed = 0;
+    WorkStealingQueue<value_type> *q =
+        (WorkStealingQueue<value_type>*)arg;
+    while (true) {
+        pthread_mutex_lock(&mutex);
+        const bool pushed = q->push(seed);
+        pthread_mutex_unlock(&mutex);
+        if (pushed) {
+            ++seed;
+            if (++npushed == N) {
+                g_stop = true;
+                break;
+            }
+        }
+    }
+    return NULL;
+}
+
+void* pop_thread(void* arg) {
+    std::vector<value_type> *popped = new std::vector<value_type>;
+    popped->reserve(N);
+    WorkStealingQueue<value_type> *q =
+        (WorkStealingQueue<value_type>*)arg;
+    while (!g_stop) {
+        value_type val;
+        pthread_mutex_lock(&mutex);
+        const bool res = q->pop(&val);
+        pthread_mutex_unlock(&mutex);
+        if (res) {
+            popped->push_back(val);
+        }
+    }
+    return popped;
 }
 
 int main(){
@@ -190,6 +234,34 @@ int main(){
         }
     }
 
+
+/*
+    if( pthread_create(&wth, NULL, push_thread, &q) == 0){
+         LOG(INFO) <<"WorkStealingQueue push_thread ok";
+    }
+
+    if( pthread_create(&wth, NULL, pop_thread, &q) == 0){
+         LOG(INFO) <<"WorkStealingQueue pop_thread ok";
+    }
+*/
+
+while (1);
+    
+
+/*
+    LOG(INFO) <<"pthread_join  ok";
+    std::vector<value_type> values;
+    values.reserve(N);
+    size_t nstolen = 0, npopped = 0;
+    for (size_t i = 0; i < ARRAY_SIZE(rth); ++i) {
+        std::vector<value_type>* res = NULL;
+        pthread_join(rth[i], (void**)&res);
+        for (size_t j = 0; j < res->size(); ++j, ++nstolen) {
+            LOG(INFO) <<"pthread_join  ok";
+            values.push_back((*res)[j]);
+        }
+    }
+*/
 
     return 1;
 }
