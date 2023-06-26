@@ -206,8 +206,7 @@ void* push_thread(void* arg) {
 void* pop_thread(void* arg) {
     std::vector<value_type> *popped = new std::vector<value_type>;
     popped->reserve(N);
-    WorkStealingQueue<value_type> *q =
-        (WorkStealingQueue<value_type>*)arg;
+    WorkStealingQueue<value_type> *q = (WorkStealingQueue<value_type>*)arg;
     while (!g_stop) {
         value_type val;
         pthread_mutex_lock(&mutex);
@@ -235,11 +234,12 @@ int main(){
     }
 
 
-/*
+
     if( pthread_create(&wth, NULL, push_thread, &q) == 0){
          LOG(INFO) <<"WorkStealingQueue push_thread ok";
     }
 
+/*
     if( pthread_create(&wth, NULL, pop_thread, &q) == 0){
          LOG(INFO) <<"WorkStealingQueue pop_thread ok";
     }
