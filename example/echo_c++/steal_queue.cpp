@@ -47,7 +47,7 @@ public:
         _capacity = capacity;
         return 0;
     }
-
+    // 底部push
     // 将一个项推入队列。
     // 如果成功推入，则返回true。
     // 可能与 steal() 并行执行。
@@ -58,11 +58,12 @@ public:
         if (b >= t + _capacity) { // Full queue. == （_bottom - _top）>= _capacity 队列满了
             return false;
         }
+        LOG(INFO) <<" push t "<<t<<" b "<<b;
         _buffer[b & (_capacity - 1)] = x;// b & (_capacity - 1) == b % _capacity 的一个快速等价物
         _bottom.store(b + 1, std::memory_order_release);
         return true;
     }
-
+    // 底部pop弹出
     // 从队列中弹出一个项。
     // 如果成功弹出，则返回true，并将项写入val。
     // 可能与steal()并行执行。
@@ -75,6 +76,7 @@ public:
             // 较小的陈旧的_top不应进入此分支。
             return false;
         }
+        LOG(INFO) <<" pop t "<<t<<" b "<<b;
         const size_t newb = b - 1;
         _bottom.store(newb, std::memory_order_relaxed);
         std::atomic_thread_fence(std::memory_order_seq_cst);
@@ -87,14 +89,18 @@ public:
         if (t != newb) {
             return true;
         }
-        // 单个最后一个元素，与steal()竞争。
+        // 单个最后一个元素，与steal()竞争  这个要理解...
         const bool popped = _top.compare_exchange_strong(
             t, t + 1, std::memory_order_seq_cst, std::memory_order_relaxed);
+
+        //如果返回 true 这意味着 _top 的值与 t 相等，并且已成功地将 _top 的值设置为 t + 1
+        //如果返回 false 这意味着 _top 的值与 t 不相等。此时，t 变量将被设置为 _top 的当前值，以便你可以选择重试或执行其他操作
+
         _bottom.store(b, std::memory_order_relaxed);
         return popped;
     }
     // 底部下标值比上面的大.
-    // 这个方法的目的是从队列的底部窃取任务，而不会与从队列的顶部弹出任务的其他线程发生冲突。请注意，此方法是线程安全的，并且可以与其他线程的push，pop和steal操作并行执行。
+    // 这个方法的目的是从队列的顶部窃取任务，而不会与从队列的底部弹出任务的其他线程发生冲突。请注意，此方法是线程安全的，并且可以与其他线程的push，pop和steal操作并行执行。
     // 从队列中窃取一个项。
     // 如果成功窃取，则返回true。
     // 可能与push()、pop()或另一个steal()并行执行。
@@ -186,8 +192,7 @@ void* steal_thread(void* arg) {
 void* push_thread(void* arg) {
     size_t npushed = 0;
     value_type seed = 0;
-    WorkStealingQueue<value_type> *q =
-        (WorkStealingQueue<value_type>*)arg;
+    WorkStealingQueue<value_type> *q = (WorkStealingQueue<value_type>*)arg;
     while (true) {
         pthread_mutex_lock(&mutex);
         const bool pushed = q->push(seed);
@@ -227,6 +232,7 @@ int main(){
 
     pthread_t rth[8];
     pthread_t wth, pop_th;
+    
     for (size_t i = 0; i < ARRAY_SIZE(rth); ++i) {
         if(pthread_create(&rth[i], NULL, steal_thread, &q) == 0){
             LOG(INFO) <<"WorkStealingQueue pthread_create ok";
@@ -239,17 +245,13 @@ int main(){
          LOG(INFO) <<"WorkStealingQueue push_thread ok";
     }
 
-/*
-    if( pthread_create(&wth, NULL, pop_thread, &q) == 0){
+
+    if( pthread_create(&pop_th, NULL, pop_thread, &q) == 0){
          LOG(INFO) <<"WorkStealingQueue pop_thread ok";
     }
-*/
 
-while (1);
-    
 
-/*
-    LOG(INFO) <<"pthread_join  ok";
+
     std::vector<value_type> values;
     values.reserve(N);
     size_t nstolen = 0, npopped = 0;
@@ -257,11 +259,38 @@ while (1);
         std::vector<value_type>* res = NULL;
         pthread_join(rth[i], (void**)&res);
         for (size_t j = 0; j < res->size(); ++j, ++nstolen) {
-            LOG(INFO) <<"pthread_join  ok";
             values.push_back((*res)[j]);
         }
     }
-*/
+    pthread_join(wth, NULL);
+    std::vector<value_type>* res = NULL;
+    pthread_join(pop_th, (void**)&res);
+    for (size_t j = 0; j < res->size(); ++j, ++npopped) {
+        values.push_back((*res)[j]);
+    }
+
+    value_type val;
+    while (q.pop(&val)) {
+        values.push_back(val);
+    }
+
+    std::sort(values.begin(), values.end());
+    values.resize(std::unique(values.begin(), values.end()) - values.begin());
+    
+    //ASSERT_EQ(N, values.size());
+    for (size_t i = 0; i < N; ++i) {
+        //ASSERT_EQ(i, values[i]);
+    }
+    std::cout << "stolen=" << nstolen
+              << " popped=" << npopped
+              << " left=" << (N - nstolen - npopped)  << std::endl;
+
+
+
+
+//while (1);
+    
+
 
     return 1;
 }
