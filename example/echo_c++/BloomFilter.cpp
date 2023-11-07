@@ -2,6 +2,7 @@
 #include <bitset>
 #include <cmath>
 #include <functional>
+#include <iostream>
 /*
 
 这个简单的例子使用了标准库中的std::bitset和std::hash来实现一个Bloom过滤器。在实际应用中，根据数据量的大小和可接受的误报率，你可能需要选择不同的位数组大小和哈希函数数量。
