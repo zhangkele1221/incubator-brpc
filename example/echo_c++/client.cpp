@@ -21,7 +21,7 @@
 #include <butil/logging.h>
 #include <butil/time.h>
 #include <brpc/channel.h>
-#include "echo.pb.h"
+#include "infer.pb.h"
 
 DEFINE_string(attachment, "", "Carry this along with requests");
 DEFINE_string(protocol, "baidu_std", "Protocol type. Defined in src/brpc/options.proto");

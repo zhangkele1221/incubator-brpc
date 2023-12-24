@@ -29,7 +29,7 @@ set(CMAKE_PREFIX_PATH ${OUTPUT_PATH})
 
 include(FindThreads)
 include(FindProtobuf)
-protobuf_generate_cpp(PROTO_SRC PROTO_HEADER echo.proto)
+protobuf_generate_cpp(PROTO_SRC PROTO_HEADER infer.proto)
 # include PROTO_HEADER
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
@@ -137,8 +137,8 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
         "-Wl,-U,_ProfilerStop")
 endif()
 
-add_executable(echo_client client.cpp ${PROTO_SRC} ${PROTO_HEADER})
+#add_executable(echo_client client.cpp ${PROTO_SRC} ${PROTO_HEADER})
 add_executable(echo_server server.cpp ${PROTO_SRC} ${PROTO_HEADER})
 
-target_link_libraries(echo_client ${BRPC_LIB} ${DYNAMIC_LIB})
+#target_link_libraries(echo_client ${BRPC_LIB} ${DYNAMIC_LIB})
 target_link_libraries(echo_server ${BRPC_LIB} ${DYNAMIC_LIB})

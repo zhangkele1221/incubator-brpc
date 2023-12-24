@@ -1,0 +1,17 @@
+syntax="proto2";
+package example;
+
+option cc_generic_services = true;
+
+message NewsClassifyRequest {
+    required string title = 1;
+};
+
+message NewsClassifyResponse {
+    required string result = 1;
+    optional float score = 2;
+};
+
+service InferService {
+    rpc NewsClassify(NewsClassifyRequest) returns (NewsClassifyResponse);
+};

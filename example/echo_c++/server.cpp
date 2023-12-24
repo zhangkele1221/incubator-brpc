@@ -1,28 +1,9 @@
-// Licensed to the Apache Software Foundation (ASF) under one
-// or more contributor license agreements.  See the NOTICE file
-// distributed with this work for additional information
-// regarding copyright ownership.  The ASF licenses this file
-// to you under the Apache License, Version 2.0 (the
-// "License"); you may not use this file except in compliance
-// with the License.  You may obtain a copy of the License at
-//
-//   http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
-
-// A server to receive EchoRequest and send back EchoResponse.
-
 #include <gflags/gflags.h>
 #include <butil/logging.h>
 #include <brpc/server.h>
-#include "echo.pb.h"
+#include "infer.pb.h"
+#include "util/model.h"
 
-DEFINE_bool(echo_attachment, true, "Echo attachment as well");
 DEFINE_int32(port, 8000, "TCP Port of this server");
 DEFINE_string(listen_addr, "", "Server listen address, may be IPV4/IPV6/UDS."
             " If this is set, the flag port will be ignored");
@@ -31,64 +12,51 @@ DEFINE_int32(idle_timeout_s, -1, "Connection will be closed if there is no "
 DEFINE_int32(logoff_ms, 2000, "Maximum duration of server's LOGOFF state "
              "(waiting for client to close connection before server stops)");
 
-// Your implementation of example::EchoService
-// Notice that implementing brpc::Describable grants the ability to put
-// additional information in /status.
-namespace example {
-class EchoServiceImpl : public EchoService {
+namespace guodongxiaren {
+class InferServiceImpl : public InferService {
 public:
-    EchoServiceImpl() {};
-    virtual ~EchoServiceImpl() {};
-    virtual void Echo(google::protobuf::RpcController* cntl_base,
-                      const EchoRequest* request,
-                      EchoResponse* response,
+    InferServiceImpl() {}
+    virtual ~InferServiceImpl() { delete model; }
+    // 接口
+    virtual void NewsClassify(google::protobuf::RpcController* cntl_base,
+                      const NewsClassifyRequest* request,
+                      NewsClassifyResponse* response,
                       google::protobuf::Closure* done) {
-        // This object helps you to call done->Run() in RAII style. If you need
-        // to process the request asynchronously, pass done_guard.release().
         brpc::ClosureGuard done_guard(done);
 
         brpc::Controller* cntl =
             static_cast<brpc::Controller*>(cntl_base);
 
-        // The purpose of following logs is to help you to understand
-        // how clients interact with servers more intuitively. You should 
-        // remove these logs in performance-sensitive servers.
-        LOG(INFO) << "Received request[log_id=" << cntl->log_id() 
-                  << "] from " << cntl->remote_side() 
-                  << " to " << cntl->local_side()
-                  << ": " << request->message()
-                  << " (attached=" << cntl->request_attachment() << ")";
+        float score = 0.0f;
+        auto result = model->predict(request->title(), &score);
+        LOG(INFO) << " " << request->title()
+                  << " is " << result
+                  << " score: " << score;
 
-        // Fill response.
-        response->set_message(request->message());
-
-        // You can compress the response by setting Controller, but be aware
-        // that compression may be costly, evaluate before turning on.
-        // cntl->set_response_compress_type(brpc::COMPRESS_TYPE_GZIP);
-
-        if (FLAGS_echo_attachment) {
-            // Set attachment which is wired to network directly instead of
-            // being serialized into protobuf messages.
-            cntl->response_attachment().append(cntl->request_attachment());
-        }
+        response->set_result(result);
+        response->set_score(score);
     }
+
+    // 初始化函数
+    int Init(const std::string& model_path, const std::string& vocab_path) {
+        model = new Model(model_path, vocab_path);
+    }
+    Model* model = nullptr;
 };
-}  // namespace example
+} // namespace guodongxiaren
 
 int main(int argc, char* argv[]) {
-    // Parse gflags. We recommend you to use gflags as well.
-    GFLAGS_NS::ParseCommandLineFlags(&argc, &argv, true);
+    gflags::ParseCommandLineFlags(&argc, &argv, true);
 
-    // Generally you only need one Server.
     brpc::Server server;
 
-    // Instance of your service.
-    example::EchoServiceImpl echo_service_impl;
+    guodongxiaren::InferServiceImpl service_impl;
+    // 初始化
+    const char* vocab_path = "/home/guodongxiaren/vocab.txt";
+    const char* model_path = "/home/guodongxiaren/model.onnx";
+    service_impl.Init(model_path, vocab_path);
 
-    // Add the service into server. Notice the second parameter, because the
-    // service is put on stack, we don't want server to delete it, otherwise
-    // use brpc::SERVER_OWNS_SERVICE.
-    if (server.AddService(&echo_service_impl, 
+    if (server.AddService(&service_impl, 
                           brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
         LOG(ERROR) << "Fail to add service";
         return -1;
@@ -103,15 +71,13 @@ int main(int argc, char* argv[]) {
     } else {
         point = butil::EndPoint(butil::IP_ANY, FLAGS_port);
     }
-    // Start the server.
     brpc::ServerOptions options;
     options.idle_timeout_sec = FLAGS_idle_timeout_s;
     if (server.Start(point, &options) != 0) {
-        LOG(ERROR) << "Fail to start EchoServer";
+        LOG(ERROR) << "Fail to start InferServer";
         return -1;
     }
 
-    // Wait until Ctrl-C is pressed, then Stop() and Join() the server.
     server.RunUntilAskedToQuit();
     return 0;
 }
