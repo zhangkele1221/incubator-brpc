@@ -56,8 +56,7 @@ int main(int argc, char* argv[]) {
     const char* model_path = "/home/guodongxiaren/model.onnx";
     service_impl.Init(model_path, vocab_path);
 
-    if (server.AddService(&service_impl, 
-                          brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
+    if (server.AddService(&service_impl,brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
         LOG(ERROR) << "Fail to add service";
         return -1;
     }

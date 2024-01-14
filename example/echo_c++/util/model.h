@@ -10,7 +10,7 @@
 
 //#include <onnxruntime/core/session/onnxruntime_cxx_api.h>
 
-#include <onnxruntime_cxx_api.h>
+#include "onnxruntime_cxx_api.h"
 
 //https://unicode.org/reports/tr15/#Norm_Forms
 //https://ssl.icu-project.org/apiref/icu4c/uchar_8h.html
@@ -411,6 +411,11 @@ const static std::vector<std::string> kNames = {
     "entertainment"
 };
 
+template <typename T>
+int argmax(T begin, T end) {
+    return std::distance(begin, std::max_element(begin, end));
+}
+
 int Model::infer(const std::string& text, float* score) {
     auto& session = *ses_;
     // 调用前面的build_input
@@ -452,7 +457,7 @@ int Model::infer(const std::string& text, float* score) {
 std::string Model::predict(const std::string& text, float* score) {
     int idx = infer(text, score);
     return (idx >= 0 && idx < kNames.size()) ? kNames[idx] : "Unknown";
-}}
+}
 
 Model::Model(const std::string& model_path, 
              const std::string& vocab_path)
