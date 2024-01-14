@@ -8,8 +8,9 @@
 #include <memory>
 #include <sstream>
 
-#include <onnxruntime/core/session/onnxruntime_cxx_api.h>
+//#include <onnxruntime/core/session/onnxruntime_cxx_api.h>
 
+#include <onnxruntime_cxx_api.h>
 
 //https://unicode.org/reports/tr15/#Norm_Forms
 //https://ssl.icu-project.org/apiref/icu4c/uchar_8h.html

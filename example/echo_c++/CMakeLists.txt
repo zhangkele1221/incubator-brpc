@@ -91,8 +91,13 @@ if(CMAKE_VERSION VERSION_LESS "3.1.3")
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
     endif()
 else()
-    set(CMAKE_CXX_STANDARD 11)
+    #set(CMAKE_CXX_STANDARD 11)
     set(CMAKE_CXX_STANDARD_REQUIRED ON)
+    set(ONNXRUNTIME_DIR "/root/source_code/onnxruntime-linux-x64-1.16.3")
+    set(CMAKE_CXX_STANDARD 17)
+    #set(CMAKE_CXX_STANDARD_REQUIRED True)
+
+
 endif()
 
 find_path(LEVELDB_INCLUDE_PATH NAMES leveldb/db.h)
@@ -110,6 +115,9 @@ endif()
 
 find_package(OpenSSL)
 include_directories(${OPENSSL_INCLUDE_DIR})
+
+include_directories(${ONNXRUNTIME_DIR}/include)
+link_directories(${ONNXRUNTIME_DIR}/lib)
 
 set(DYNAMIC_LIB
     ${CMAKE_THREAD_LIBS_INIT}
@@ -142,3 +150,17 @@ add_executable(echo_server server.cpp ${PROTO_SRC} ${PROTO_HEADER})
 
 #target_link_libraries(echo_client ${BRPC_LIB} ${DYNAMIC_LIB})
 target_link_libraries(echo_server ${BRPC_LIB} ${DYNAMIC_LIB})
+
+
+
+
+#include_directories(path_to_onnxruntime_include)
+#link_directories(path_to_onnxruntime_lib)
+
+#include_directories(${ONNXRUNTIME_DIR}/include)
+#link_directories(${ONNXRUNTIME_DIR}/lib)
+
+#add_executable(OnnxRuntimeDemo src/main.cpp)
+
+#target_link_libraries(OnnxRuntimeDemo onnxruntime)
+
