@@ -13,37 +13,39 @@ DEFINE_int32(logoff_ms, 2000, "Maximum duration of server's LOGOFF state "
              "(waiting for client to close connection before server stops)");
 
 namespace guodongxiaren {
-class InferServiceImpl : public InferService {
-public:
-    InferServiceImpl() {}
-    virtual ~InferServiceImpl() { delete model; }
-    // 接口
-    virtual void NewsClassify(google::protobuf::RpcController* cntl_base,
-                      const NewsClassifyRequest* request,
-                      NewsClassifyResponse* response,
-                      google::protobuf::Closure* done) {
-        brpc::ClosureGuard done_guard(done);
+    class InferServiceImpl : public InferService {
+    public:
+        InferServiceImpl() {}
+        virtual ~InferServiceImpl() { delete model; }
+        // 接口
+        virtual void NewsClassify(google::protobuf::RpcController* cntl_base,
+                        const NewsClassifyRequest* request,
+                        NewsClassifyResponse* response,
+                        google::protobuf::Closure* done) {
+            brpc::ClosureGuard done_guard(done);
 
-        brpc::Controller* cntl =
-            static_cast<brpc::Controller*>(cntl_base);
+            brpc::Controller* cntl =
+                static_cast<brpc::Controller*>(cntl_base);
 
-        float score = 0.0f;
-        auto result = model->predict(request->title(), &score);
-        LOG(INFO) << " " << request->title()
-                  << " is " << result
-                  << " score: " << score;
+            float score = 0.0f;
+            auto result = model->predict(request->title(), &score);
+            LOG(INFO) << " " << request->title()
+                    << " is " << result
+                    << " score: " << score;
 
-        response->set_result(result);
-        response->set_score(score);
-    }
+            response->set_result(result);
+            response->set_score(score);
+        }
 
-    // 初始化函数
-    int Init(const std::string& model_path, const std::string& vocab_path) {
-        model = new Model(model_path, vocab_path);
-    }
-    Model* model = nullptr;
-};
+        // 初始化函数
+        int Init(const std::string& model_path, const std::string& vocab_path) {
+            model = new Model(model_path, vocab_path);
+            return 0;
+        }
+        Model* model = nullptr;
+    };
 } // namespace guodongxiaren
+
 
 int main(int argc, char* argv[]) {
     gflags::ParseCommandLineFlags(&argc, &argv, true);
@@ -56,7 +58,7 @@ int main(int argc, char* argv[]) {
     const char* model_path = "/home/guodongxiaren/model.onnx";
     service_impl.Init(model_path, vocab_path);
 
-    if (server.AddService(&service_impl,brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
+    if (server.AddService(&service_impl, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
         LOG(ERROR) << "Fail to add service";
         return -1;
     }

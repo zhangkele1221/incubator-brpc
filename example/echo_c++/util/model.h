@@ -456,7 +456,7 @@ int Model::infer(const std::string& text, float* score) {
 
 std::string Model::predict(const std::string& text, float* score) {
     int idx = infer(text, score);
-    return (idx >= 0 && idx < kNames.size()) ? kNames[idx] : "Unknown";
+    return (idx >= 0 && static_cast<size_t>(idx) < kNames.size()) ? kNames[idx] : "Unknown";
 }
 
 Model::Model(const std::string& model_path, 
@@ -482,7 +482,7 @@ std::vector<std::vector<int64_t>> Model::build_input(const std::string& text) {
     std::vector<int64_t> mask(32);
     input[0] = 101; // Bert模型的[CLS]标记的
     mask[0] = 1;
-    for (int i = 0; i < token_ids.size() && i < 31; ++i) {
+    for (size_t i = 0; i < token_ids.size() && i < 31; ++i) {
         input[i+1] = token_ids[i];
         mask[i+1] = token_ids[i] > 0;
     }
