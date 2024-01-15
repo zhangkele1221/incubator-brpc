@@ -24,8 +24,7 @@ namespace guodongxiaren {
                         google::protobuf::Closure* done) {
             brpc::ClosureGuard done_guard(done);
 
-            brpc::Controller* cntl =
-                static_cast<brpc::Controller*>(cntl_base);
+            //brpc::Controller* cntl = static_cast<brpc::Controller*>(cntl_base);
 
             float score = 0.0f;
             auto result = model->predict(request->title(), &score);
@@ -42,6 +41,7 @@ namespace guodongxiaren {
             model = new Model(model_path, vocab_path);
             return 0;
         }
+        
         Model* model = nullptr;
     };
 } // namespace guodongxiaren
@@ -54,8 +54,8 @@ int main(int argc, char* argv[]) {
 
     guodongxiaren::InferServiceImpl service_impl;
     // 初始化
-    const char* vocab_path = "/home/guodongxiaren/vocab.txt";
-    const char* model_path = "/home/guodongxiaren/model.onnx";
+    const char* vocab_path = "/root/learing/online_servering/vocab.txt";
+    const char* model_path = "/root/learing/online_servering/model.onnx"; 
     service_impl.Init(model_path, vocab_path);
 
     if (server.AddService(&service_impl, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {

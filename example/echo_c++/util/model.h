@@ -437,7 +437,7 @@ int Model::infer(const std::string& text, float* score) {
     ort_inputs.push_back(std::move(input_tensor));
     ort_inputs.push_back(std::move(mask_tensor));
 
-    const static std::vector<const char*> input_node_names = {"ids", "mask"};
+    const static std::vector<const char*> input_node_names = {"ids", "mask"};    
     const static std::vector<const char*> output_node_names = {"output"};
     auto output_tensors = session.Run(Ort::RunOptions{nullptr}, input_node_names.data(), ort_inputs.data(),
                                     ort_inputs.size(), output_node_names.data(), 1);
@@ -459,18 +459,19 @@ std::string Model::predict(const std::string& text, float* score) {
     return (idx >= 0 && static_cast<size_t>(idx) < kNames.size()) ? kNames[idx] : "Unknown";
 }
 
-Model::Model(const std::string& model_path, 
-             const std::string& vocab_path)
-                 :env_(ORT_LOGGING_LEVEL_WARNING, "test") {
+Model::Model(const std::string& model_path, const std::string& vocab_path)
+    : env_(ORT_LOGGING_LEVEL_WARNING, "test") {
     tokenizer_ = new FullTokenizer(vocab_path);
 
     Ort::SessionOptions session_options;
-    OrtCUDAProviderOptions cuda_options;
-    session_options.AppendExecutionProvider_CUDA(cuda_options);
+    // 以下两行被删除或注释掉
+    // OrtCUDAProviderOptions cuda_options;
+    // session_options.AppendExecutionProvider_CUDA(cuda_options);
+
     ses_ = new Ort::Session(env_, model_path.c_str(), session_options);
 }
 
-
+//curl -d '{"title": "衡水中学：破除超限、内卷等现象"}' 127.0.0.1:8000/InferService/NewsClassify
 
 std::vector<std::vector<int64_t>> Model::build_input(const std::string& text) { 
     auto tokens = tokenizer_->tokenize(text);
