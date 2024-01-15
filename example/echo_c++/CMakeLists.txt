@@ -149,7 +149,9 @@ endif()
 add_executable(echo_server server.cpp ${PROTO_SRC} ${PROTO_HEADER})
 
 #target_link_libraries(echo_client ${BRPC_LIB} ${DYNAMIC_LIB})
-target_link_libraries(echo_server ${BRPC_LIB} ${DYNAMIC_LIB})
+#target_link_libraries(echo_server ${BRPC_LIB} ${DYNAMIC_LIB})
+target_link_libraries(echo_server ${BRPC_LIB} ${DYNAMIC_LIB} utf8proc onnxruntime)
+
 
 #link_directories(path_to_utf8proc_lib path_to_onnxruntime_lib)
 
