@@ -19,6 +19,7 @@
 #define BAIDU_RPC_HTTP2_H
 
 #include "brpc/http_status_code.h"
+#include <cstdint>>
 
 // To baidu-rpc developers: This is a header included by user, don't depend
 // on internal structures, use opaque pointers instead.
