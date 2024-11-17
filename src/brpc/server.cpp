@@ -736,7 +736,7 @@ int Server::StartInternal(const butil::EndPoint& endpoint,
     } else {
         // Always reset to default options explicitly since `_options'
         // may be the options for the last run or even bad options
-        _options = ServerOptions();
+        _options = ServerOptions();//..............................................
     }
 
     if (!_options.h2_settings.IsValid(true/*log_error*/)) {
@@ -955,7 +955,10 @@ int Server::StartInternal(const butil::EndPoint& endpoint,
     _listen_addr = endpoint;
     for (int port = port_range.min_port; port <= port_range.max_port; ++port) {
         _listen_addr.port = port;
-        butil::fd_guard sockfd(tcp_listen(_listen_addr));
+
+        LOG(ERROR) << "zhangkele  listen ip= " << _listen_addr.ip<< " port = "<<_listen_addr.port;
+        
+        butil::fd_guard sockfd(tcp_listen(_listen_addr));//.............................
         if (sockfd < 0) {
             if (port != port_range.max_port) { // not the last port, try next
                 continue;
@@ -994,7 +997,7 @@ int Server::StartInternal(const butil::EndPoint& endpoint,
 
         // Pass ownership of `sockfd' to `_am'
         if (_am->StartAccept(sockfd, _options.idle_timeout_sec,
-                             _default_ssl_ctx) != 0) {
+                             _default_ssl_ctx) != 0) {//....................................
             LOG(ERROR) << "Fail to start acceptor";
             return -1;
         }
@@ -1020,7 +1023,10 @@ int Server::StartInternal(const butil::EndPoint& endpoint,
 
         butil::EndPoint internal_point = _listen_addr;
         internal_point.port = _options.internal_port;
-        butil::fd_guard sockfd(tcp_listen(internal_point));
+
+        LOG(ERROR) << "zhangkele  listen internal_point ip= " << internal_point.ip<< "internal_point port = "<<internal_point.port;
+        
+        butil::fd_guard sockfd(tcp_listen(internal_point));//..............................
         if (sockfd < 0) {
             LOG(ERROR) << "Fail to listen " << internal_point << " (internal)";
             return -1;
@@ -1251,7 +1257,9 @@ int Server::AddServiceInternal(google::protobuf::Service* service,
         mp.service = service;
         mp.method = md;
         mp.status = new MethodStatus;
-        _method_map[md->full_name()] = mp;
+
+        _method_map[md->full_name()] = mp;//..............................
+
         if (is_idl_support && sd->name() != sd->full_name()/*has ns*/) {
             MethodProperty mp2 = mp;
             mp2.own_method_status = false;
@@ -1274,8 +1282,11 @@ int Server::AddServiceInternal(google::protobuf::Service* service,
 
     const ServiceProperty ss = {
         is_builtin_service, svc_opt.ownership, service, NULL };
-    _fullname_service_map[sd->full_name()] = ss;
-    _service_map[sd->name()] = ss;
+
+    _fullname_service_map[sd->full_name()] = ss;//..............................
+
+    _service_map[sd->name()] = ss;//.............................................
+    
     if (is_builtin_service) {
         ++_builtin_service_count;
     } else {
