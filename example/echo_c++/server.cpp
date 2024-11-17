@@ -89,6 +89,14 @@ int main(int argc, char* argv[]) {
     // Add the service into server. Notice the second parameter, because the
     // service is put on stack, we don't want server to delete it, otherwise
     // use brpc::SERVER_OWNS_SERVICE.
+    /*
+    生命周期控制:
+        因为 server.AddService 使用了 brpc::SERVER_DOESNT_OWN_SERVICE 参数，
+        server 不负责释放 echo_service_impl 实例，
+        这意味着该对象的创建和销毁需要开发者显式地管理。
+        echo_service_impl 可能是在栈上创建，也可能是在堆上动态创建。
+        如果是在堆上动态分配的内存，你需要在合适的时候释放以防止内存泄漏。
+    */
     if (server.AddService(&echo_service_impl, 
                           brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
         LOG(ERROR) << "Fail to add service";

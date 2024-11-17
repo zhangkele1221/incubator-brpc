@@ -713,6 +713,9 @@ int Server::StartInternal(const butil::EndPoint& endpoint,
             "fix it before starting server";
         return -1;
     }
+
+    LOG(ERROR) << "zhangkele StartInternal_1 " << version();
+
     if (InitializeOnce() != 0) {
         LOG(ERROR) << "Fail to initialize Server[" << version() << ']';
         return -1;
@@ -1080,6 +1083,7 @@ int Server::StartInternal(const butil::EndPoint& endpoint,
 }
 
 int Server::Start(const butil::EndPoint& endpoint, const ServerOptions* opt) {
+    LOG(ERROR) << "zhangkele Server::Start 2";
     return StartInternal(
         endpoint, PortRange(endpoint.port, endpoint.port), opt);
 }
@@ -1110,10 +1114,12 @@ int Server::Start(const char* ip_str, PortRange port_range,
         LOG(ERROR) << "Invalid address=`" << ip_str << '\'';
         return -1;
     }
+    LOG(ERROR) << "zhangkele Server::Start 3";
     return StartInternal(butil::EndPoint(ip, 0), port_range, opt);
 }
 
 int Server::Start(PortRange port_range, const ServerOptions* opt) {
+    LOG(ERROR) << "zhangkele Server::Start 1";
     return StartInternal(butil::EndPoint(butil::IP_ANY, 0), port_range, opt);
 }
 
@@ -1198,7 +1204,12 @@ int Server::AddServiceInternal(google::protobuf::Service* service,
         LOG(ERROR) << "service=" << sd->full_name()
                    << " does not have any method.";
         return -1;
+    } else {// 自己加上的 debug  本来没有这个分之
+        LOG(ERROR) << "zhangkele service=" << sd->full_name();
     }
+
+    LOG(ERROR) << "zhangkele starting InitializeOnce \n";
+
     //// 初始化并注册：NamingService，LoadBalancer，CompressHandler，protocols等
     if (InitializeOnce() != 0) {//然后调用InitializeOnce()只进行一次初始化，该函数实际调用的是GlobalInitializeOrDieImpl
         LOG(ERROR) << "Fail to initialize Server[" << version() << ']';
