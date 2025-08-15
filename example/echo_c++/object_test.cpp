@@ -443,7 +443,7 @@ namespace butil
         ObjectPool<T>::_local_pool = NULL;
 
     template <typename T>
-    std::atomic<ObjectPool<T> *> ObjectPool<T>::_singleton = NULL;
+    std::atomic<ObjectPool<T> *> ObjectPool<T>::_singleton(nullptr);
 
     template <typename T>
     std::atomic<long> ObjectPool<T>::_nlocal(0);
