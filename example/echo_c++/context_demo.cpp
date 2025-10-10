@@ -1,6 +1,12 @@
 //  curl -d '{"message":"Hello"}' http://localhost:8000/example.EchoService/Echo | jq -r  '.message'
 
 /*
+for i in {1..5}; do
+  curl -d '{"message":"Hello"}' http://localhost:8000/example.EchoService/Echo | jq -r '.message'
+done
+*/
+
+/*
 深入解析 brpc 的 M:N 模型
 
 1. ​​M:N 模型本质​​：
@@ -186,7 +192,7 @@ virtual void Echo(google::protobuf::RpcController* cntl_base,
         "===================== brpc线程模型分析 ======================\n"
         "观察到的行为:\n"
         "- Bthread ID变化但BLS持续递增 → 状态保持机制\n"
-        "- Pthread有限复用(n个pthread处理n个请求) → 线程池优化\n"
+        "- Pthread有限复用(m个pthread处理n个请求) → 线程池优化\n"
         "- TLS符合预期 → pthread本地存储正常工作\n"
         "\n"
         "结论: brpc实现了智能的bthread状态管理和线程复用",
