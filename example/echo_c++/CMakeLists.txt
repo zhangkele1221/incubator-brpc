@@ -144,6 +144,8 @@ add_executable(cacheline_test cacheline_test.cpp ${PROTO_SRC} ${PROTO_HEADER})
 add_executable(context_demo context_demo.cpp ${PROTO_SRC} ${PROTO_HEADER})
 add_executable(cache_server_brpc cache_server_brpc.cpp ${PROTO_SRC} ${PROTO_HEADER})
 add_executable(context_bthread context_bthread.cpp ${PROTO_SRC} ${PROTO_HEADER})
+add_executable(self_learing_searver self_learing_searver.cpp ${PROTO_SRC} ${PROTO_HEADER})
+
 
 target_link_libraries(echo_client ${BRPC_LIB} ${DYNAMIC_LIB})
 target_link_libraries(echo_server ${BRPC_LIB} ${DYNAMIC_LIB})
@@ -152,3 +154,4 @@ target_link_libraries(cacheline_test ${BRPC_LIB} ${DYNAMIC_LIB})
 target_link_libraries(context_demo ${BRPC_LIB} ${DYNAMIC_LIB})
 target_link_libraries(cache_server_brpc ${BRPC_LIB} ${DYNAMIC_LIB})
 target_link_libraries(context_bthread ${BRPC_LIB} ${DYNAMIC_LIB})
+target_link_libraries(self_learing_searver ${BRPC_LIB} ${DYNAMIC_LIB})

@@ -145,9 +145,13 @@ endif()
 
 add_executable(dynamic_partition_echo_client client.cpp ${PROTO_SRC} ${PROTO_HEADER})
 add_executable(dynamic_partition_echo_server server.cpp ${PROTO_SRC} ${PROTO_HEADER})
+add_executable(self_dynamic_partition self_dynamic_partition.cpp ${PROTO_SRC} ${PROTO_HEADER})
+
 
 target_link_libraries(dynamic_partition_echo_client ${BRPC_LIB} ${DYNAMIC_LIB} ${GPERFTOOLS_LIBRARIES})
 target_link_libraries(dynamic_partition_echo_server ${BRPC_LIB} ${DYNAMIC_LIB} ${GPERFTOOLS_LIBRARIES})
+target_link_libraries(self_dynamic_partition ${BRPC_LIB} ${DYNAMIC_LIB} ${GPERFTOOLS_LIBRARIES})
+
 
 file(COPY ${PROJECT_SOURCE_DIR}/server_list
      DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
