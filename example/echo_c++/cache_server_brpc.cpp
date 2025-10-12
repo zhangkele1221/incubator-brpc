@@ -1,4 +1,20 @@
 //curl -d '{"message":"product_123"}' http://localhost:8000/example.EchoService/Echo | jq -r  '.message'
+// ab -n 100 -c 10 -p data.json -T application/json http://localhost:8000/example.EchoService/Echo | jq -r  '.message'
+
+// ab 压测工具
+// ab -n 100 -c 20 -T "application/json" -p data.json http://localhost:8000/example.EchoService/Echo
+// data.json 文件内容   {"message":"popular_key"}
+
+//观察 brpc_cache_demo.log 
+
+
+
+//# 生成100个不同的键
+// seq 1 100 | shuf > keys.txt
+
+// # 使用20个并发发送100个请求，每个请求使用不同的键
+// cat keys.txt | xargs -I{} -P20 curl -d '{"message":"key_{}"}' http://localhost:8000/example.EchoService/Echo
+
 
 
 #include <gflags/gflags.h>
@@ -9,7 +25,8 @@
 #include <map>
 #include <mutex>
 #include <unordered_map>
-#include <shared_mutex> // 添加此头文件
+#include <shared_mutex>
+#include <set>
 #include "echo.pb.h"
 
 DEFINE_bool(echo_attachment, true, "Echo attachment as well");
@@ -27,12 +44,16 @@ static pthread_key_t tls_key;
 
 // BLS 和 TLS 的析构函数
 void bls_destructor(void* data) {
-    LOG(INFO) << "销毁BLS数据: " << *(int*)data;
+    int value = *(int*)data;
+    LOG(INFO) << "销毁BLS数据: bthread=" << bthread_self()
+              << ", 最终值=" << value;
     delete (int*)data;
 }
 
 void tls_destructor(void* data) {
-    LOG(INFO) << "销毁TLS数据: " << *(int*)data;
+    int value = *(int*)data;
+    LOG(INFO) << "销毁TLS数据: pthread=" << pthread_self()
+              << ", 最终值=" << value;
     delete (int*)data;
 }
 
@@ -46,6 +67,7 @@ void init_keys() {
 int* get_or_create_bls_data() {
     void* data = bthread_getspecific(bls_key);
     if (!data) {
+        LOG(INFO) << "创建新的BLS数据: bthread=" << bthread_self();
         data = new int(0);
         CHECK_EQ(0, bthread_setspecific(bls_key, data));
     }
@@ -56,6 +78,7 @@ int* get_or_create_bls_data() {
 int* get_or_create_tls_data() {
     void* data = pthread_getspecific(tls_key);
     if (!data) {
+        LOG(INFO) << "创建新的TLS数据: pthread=" << pthread_self();
         data = new int(0);
         CHECK_EQ(0, pthread_setspecific(tls_key, data));
     }
@@ -71,21 +94,29 @@ class UnsafeGlobalCache {
 public:
     // 获取缓存值（线程不安全）
     std::string get(const std::string& key) {
+        LOG(INFO) << "[UnsafeCache] 访问键: " << key;
+        
         auto it = cache_.find(key);
         if (it != cache_.end()) {
+            LOG(INFO) << "[UnsafeCache] 缓存命中: " << key;
             return it->second;
         }
         
-        // 模拟耗时操作（数据库查询等）
+        LOG(WARNING) << "[UnsafeCache] 缓存未命中: " << key << " (开始计算新值)";
         usleep(5000); // 5ms延迟
         
         // 生成新值并缓存
         std::string value = "Value for " + key;
         cache_[key] = value;
+        
+        LOG(INFO) << "[UnsafeCache] 添加新缓存: " << key << " = " << value;
         return value;
     }
     
-    size_t size() const { return cache_.size(); }
+    size_t size() const { 
+        LOG(INFO) << "[UnsafeCache] 当前缓存大小: " << cache_.size();
+        return cache_.size(); 
+    }
 
 private:
     std::unordered_map<std::string, std::string> cache_;
@@ -96,16 +127,19 @@ class LockedButFlawedCache {
 public:
     // 获取缓存值（有并发问题）
     std::string get(const std::string& key) {
+        LOG(INFO) << "[FlawedCache] 访问键: " << key;
+        
         // 在锁外检查缓存
         {
             std::lock_guard<std::mutex> lock(mutex_);
             auto it = cache_.find(key);
             if (it != cache_.end()) {
+                LOG(INFO) << "[FlawedCache] 缓存命中: " << key;
                 return it->second;
             }
         }
         
-        // 模拟耗时操作（数据库查询等）
+        LOG(WARNING) << "[FlawedCache] 缓存未命中: " << key << " (开始计算新值)";
         usleep(5000); // 5ms延迟
         
         // 生成新值
@@ -114,6 +148,7 @@ public:
         // 加锁更新缓存
         {
             std::lock_guard<std::mutex> lock(mutex_);
+            LOG(INFO) << "[FlawedCache] 添加新缓存: " << key << " = " << value;
             cache_[key] = value;
         }
         
@@ -122,6 +157,7 @@ public:
     
     size_t size() const { 
         std::lock_guard<std::mutex> lock(mutex_);
+        LOG(INFO) << "[FlawedCache] 当前缓存大小: " << cache_.size();
         return cache_.size();
     }
 
@@ -135,16 +171,19 @@ class ThreadSafeCache {
 public:
     // 获取缓存值（线程安全）
     std::string get(const std::string& key) {
+        LOG(INFO) << "[SafeCache] 访问键: " << key;
+        
         // 首先尝试无锁读取
         {
             std::shared_lock<std::shared_mutex> lock(mutex_);
             auto it = cache_.find(key);
             if (it != cache_.end()) {
+                LOG(INFO) << "[SafeCache] 缓存命中: " << key;
                 return it->second;
             }
         }
         
-        // 模拟耗时操作（数据库查询等）
+        LOG(WARNING) << "[SafeCache] 缓存未命中: " << key << " (开始计算新值)";
         usleep(5000); // 5ms延迟
         
         // 生成新值
@@ -156,8 +195,11 @@ public:
             // 再次检查，避免其他线程已经更新
             auto it = cache_.find(key);
             if (it != cache_.end()) {
+                LOG(INFO) << "[SafeCache] 二次检查命中: " << key << " (其他线程已添加)";
                 return it->second;
             }
+            
+            LOG(INFO) << "[SafeCache] 添加新缓存: " << key << " = " << value;
             cache_[key] = value;
         }
         
@@ -166,6 +208,7 @@ public:
     
     size_t size() const { 
         std::shared_lock<std::shared_mutex> lock(mutex_);
+        LOG(INFO) << "[SafeCache] 当前缓存大小: " << cache_.size();
         return cache_.size();
     }
 
@@ -180,29 +223,39 @@ public:
     BthreadLocalCache() {
         // 创建bthread本地存储键
         CHECK_EQ(0, bthread_key_create(&cache_key_, cache_destructor));
+        LOG(INFO) << "创建BthreadLocalCache";
     }
     
     ~BthreadLocalCache() {
         bthread_key_delete(cache_key_);
+        LOG(INFO) << "销毁BthreadLocalCache";
     }
     
     // 获取缓存值（bthread本地）
     std::string get(const std::string& key) {
         // 获取bthread本地缓存
         CacheMap* cache = get_or_create_cache();
+        LOG(INFO) << "[BthreadCache] bthread=" << bthread_self() 
+                  << " 访问键: " << key;
         
         // 在本地缓存中查找
         auto it = cache->find(key);
         if (it != cache->end()) {
+            LOG(INFO) << "[BthreadCache] bthread=" << bthread_self()
+                      << " 缓存命中: " << key;
             return it->second;
         }
         
-        // 模拟耗时操作（数据库查询等）
+        LOG(WARNING) << "[BthreadCache] bthread=" << bthread_self()
+                     << " 缓存未命中: " << key << " (开始计算新值)";
         usleep(5000); // 5ms延迟
         
         // 生成新值并缓存
         std::string value = "Value for " + key;
         (*cache)[key] = value;
+        
+        LOG(INFO) << "[BthreadCache] bthread=" << bthread_self()
+                  << " 添加新缓存: " << key << " = " << value;
         return value;
     }
     
@@ -215,6 +268,7 @@ public:
         for (auto* cache : all_caches_) {
             total += cache->size();
         }
+        LOG(INFO) << "[BthreadCache] 总缓存大小: " << total;
         return total;
     }
 
@@ -222,7 +276,17 @@ private:
     using CacheMap = std::unordered_map<std::string, std::string>;
     
     static void cache_destructor(void* data) {
-        delete static_cast<CacheMap*>(data);
+        CacheMap* cache = static_cast<CacheMap*>(data);
+        LOG(INFO) << "销毁Bthread缓存: bthread=" << bthread_self()
+                  << ", 缓存大小=" << cache->size();
+        
+        {
+            std::lock_guard<std::mutex> lock(stats_mutex_);
+            all_caches_.erase(cache);
+            LOG(INFO) << "剩余Bthread缓存数量: " << all_caches_.size();
+        }
+        
+        delete cache;
     }
     
     CacheMap* get_or_create_cache() {
@@ -234,14 +298,20 @@ private:
             // 记录所有缓存（仅用于演示）
             std::lock_guard<std::mutex> lock(stats_mutex_);
             all_caches_.insert(static_cast<CacheMap*>(data));
+            LOG(INFO) << "创建新的Bthread缓存: bthread=" << bthread_self()
+                      << ", 当前缓存总数: " << all_caches_.size();
         }
         return static_cast<CacheMap*>(data);
     }
 
     bthread_key_t cache_key_;
-    mutable std::mutex stats_mutex_;
-    std::set<CacheMap*> all_caches_; // 仅用于统计，实际应用中通常不需要
+    static std::mutex stats_mutex_; // 静态成员
+    static std::set<CacheMap*> all_caches_; // 静态成员
 };
+
+// 初始化静态成员
+std::mutex BthreadLocalCache::stats_mutex_;
+std::set<BthreadLocalCache::CacheMap*> BthreadLocalCache::all_caches_;
 
 // ====================== 服务实现 ======================
 
@@ -251,9 +321,13 @@ public:
         : unsafe_cache_(),
           flawed_cache_(),
           safe_cache_(),
-          bthread_cache_() {}
+          bthread_cache_() {
+        LOG(INFO) << "创建EchoServiceImpl";
+    }
     
-    virtual ~EchoServiceImpl() {};
+    virtual ~EchoServiceImpl() {
+        LOG(INFO) << "销毁EchoServiceImpl";
+    };
     
     virtual void Echo(google::protobuf::RpcController* cntl_base,
                       const EchoRequest* request,
@@ -262,12 +336,19 @@ public:
         brpc::ClosureGuard done_guard(done);
         brpc::Controller* cntl = static_cast<brpc::Controller*>(cntl_base);
 
+        LOG(INFO) << "===== 开始处理请求 =====";
+        LOG(INFO) << "请求键: " << request->message();
+        LOG(INFO) << "bthread=" << bthread_self() 
+                  << ", pthread=" << pthread_self();
+
         // 获取 BLS 和 TLS 数据并递增
         int* bls_data = get_or_create_bls_data();
         int* tls_data = get_or_create_tls_data();
 
         (*bls_data)++;
         (*tls_data)++;
+
+        LOG(INFO) << "BLS值: " << *bls_data << ", TLS值: " << *tls_data;
 
         // 获取当前线程和bthread ID
         bthread_t bthread_id = bthread_self();
@@ -278,9 +359,16 @@ public:
         const std::string& key = request->message();
         
         // 使用各种缓存获取值
+        LOG(INFO) << "使用不安全缓存获取值...";
         std::string unsafe_value = unsafe_cache_.get(key);
+        
+        LOG(INFO) << "使用带锁但有缺陷缓存获取值...";
         std::string flawed_value = flawed_cache_.get(key);
+        
+        LOG(INFO) << "使用线程安全缓存获取值...";
         std::string safe_value = safe_cache_.get(key);
+        
+        LOG(INFO) << "使用bthread本地缓存获取值...";
         std::string bthread_value = bthread_cache_.get(key);
 
         // 构造响应消息
@@ -332,6 +420,8 @@ public:
         if (FLAGS_echo_attachment) {
             cntl->response_attachment().append(cntl->request_attachment());
         }
+        
+        LOG(INFO) << "===== 请求处理完成 =====";
     }
 
 private:
@@ -345,7 +435,22 @@ private:
 }  // namespace example
 
 int main(int argc, char* argv[]) {
+    // 初始化日志系统
+    logging::LoggingSettings settings;
+    settings.logging_dest = logging::LOG_TO_FILE;
+    settings.log_file = "brpc_cache_demo.log";
+    settings.lock_log = logging::LOCK_LOG_FILE;
+    settings.delete_old = logging::DELETE_OLD_LOG_FILE;
+    logging::InitLogging(settings);
+    
+    // 设置日志级别 - 使用正确的常量
+    logging::SetMinLogLevel(logging::BLOG_INFO);
+    
     GFLAGS_NS::ParseCommandLineFlags(&argc, &argv, true);
+    
+    LOG(INFO) << "==================== 启动服务 ====================";
+    LOG(INFO) << "端口: " << FLAGS_port;
+    LOG(INFO) << "监听地址: " << FLAGS_listen_addr;
     
     // 初始化键
     init_keys();
@@ -381,5 +486,15 @@ int main(int argc, char* argv[]) {
 
     server.RunUntilAskedToQuit();
     
+    LOG(INFO) << "服务停止中...";
+    
+    // 清理资源
+    bthread_key_delete(bls_key);
+    pthread_key_delete(tls_key);
+    
+    LOG(INFO) << "服务已停止";
+    
     return 0;
 }
+
+
