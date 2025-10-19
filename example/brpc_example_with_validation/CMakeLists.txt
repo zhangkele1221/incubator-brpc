@@ -16,7 +16,7 @@
 # under the License.
 
 cmake_minimum_required(VERSION 2.8.10)
-project(demo_c++ C CXX)
+project(brpc_example_with_validation C CXX)
 
 option(LINK_SO "Whether examples are linked dynamically" OFF)
 
@@ -29,9 +29,19 @@ set(CMAKE_PREFIX_PATH ${OUTPUT_PATH})
 
 include(FindThreads)
 include(FindProtobuf)
-protobuf_generate_cpp(PROTO_SRC PROTO_HEADER echo.proto)
-# include PROTO_HEADER
+
+# 设置 proto 目录
+set(PROTO_DIR ${CMAKE_CURRENT_SOURCE_DIR}/proto)
+include_directories(${PROTO_DIR})
+
+# 生成 proto 文件
+protobuf_generate_cpp(VALIDATOR_PROTO_SRC VALIDATOR_PROTO_HEADER ${PROTO_DIR}/validator.proto)
+protobuf_generate_cpp(ECHO_PROTO_SRC ECHO_PROTO_HEADER ${PROTO_DIR}/echo.proto)
+set_source_files_properties(${VALIDATOR_PROTO_HEADER} ${ECHO_PROTO_HEADER} PROPERTIES GENERATED TRUE)
+
+# 包含生成的头文件目录
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
+
 
 # Search for libthrift* by best effort. If it is not found and brpc is
 # compiled with thrift protocol enabled, a link error would be reported.
@@ -137,8 +147,10 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
         "-Wl,-U,_ProfilerStop")
 endif()
 
-add_executable(echo_client client.cpp ${PROTO_SRC} ${PROTO_HEADER})
-add_executable(echo_server server.cpp ${PROTO_SRC} ${PROTO_HEADER})
+# 添加可执行文件
+add_executable(echo_client echo_client.cpp ${VALIDATOR_PROTO_SRC} ${ECHO_PROTO_SRC})
+add_executable(echo_server echo_server.cpp ${VALIDATOR_PROTO_SRC} ${ECHO_PROTO_SRC})
 
+# 链接库
 target_link_libraries(echo_client ${BRPC_LIB} ${DYNAMIC_LIB})
 target_link_libraries(echo_server ${BRPC_LIB} ${DYNAMIC_LIB})

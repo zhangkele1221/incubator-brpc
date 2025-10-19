@@ -1,0 +1,51 @@
+// proto/echo.proto
+syntax = "proto3";
+
+package example;
+
+option cc_generic_services = true;  // 添加这一行
+
+//import "proto/validator.proto";
+
+import "validator.proto";
+
+// 定义带校验规则的请求消息
+message EchoRequest {
+    string message = 1 [(validator.Rule) = {
+        string: {not_empty: true, min_len: 1, max_len: 100}
+    }];
+    
+    int32 repeat_count = 2 [(validator.Rule) = {
+        int32: {gte: 1, lte: 10}
+    }];
+    
+    string user_name = 3 [(validator.Rule) = {
+        string: {not_empty: true, max_len: 50}
+    }];
+    
+    int32 user_age = 4 [(validator.Rule) = {
+        int32: {gte: 0, lte: 150}
+    }];
+    
+    string email = 5 [(validator.Rule) = {
+        string: {regex_pattern: "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\\\.[a-zA-Z]{2,}$"}
+    }];
+    
+    repeated string tags = 6 [(validator.Rule) = {
+        array: {not_empty: true, max_len: 10}
+    }];
+    
+    int32 priority = 7 [(validator.Rule) = {
+        int32: {in: [1, 2, 3, 4, 5]}
+    }];
+}
+
+message EchoResponse {
+    string message = 1;
+    int32 processed_count = 2;
+    string status = 3;
+}
+
+service EchoService {
+    rpc Echo(EchoRequest) returns (EchoResponse);
+}
