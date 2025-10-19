@@ -6,13 +6,14 @@ package validator;
 import "google/protobuf/descriptor.proto";
 
 // 数值类型校验规则
+// 示例：int32类型规则
 message Int32Rule {
-    oneof lt_rule { int32 lt = 1; }
-    oneof lte_rule { int32 lte = 2; }
-    oneof gt_rule { int32 gt = 3; }
-    oneof gte_rule { int32 gte = 4; }
-    repeated int32 in = 5;
-    repeated int32 not_in = 6;
+  oneof lt_rule { int32 lt = 1; }    // 小于
+  oneof lte_rule { int32 lte = 2; }  // 小于等于
+  oneof gt_rule { int32 gt = 3; }    // 大于
+  oneof gte_rule { int32 gte = 4; }  // 大于等于
+  repeated int32 in = 5;             // 白名单
+  repeated int32 not_in = 6;         // 黑名单
 }
 
 message Int64Rule {
