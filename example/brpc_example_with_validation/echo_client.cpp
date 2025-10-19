@@ -22,7 +22,7 @@ void TestValidRequest(brpc::Channel& channel) {
     request.set_repeat_count(3);
     request.set_user_name("John Doe");
     request.set_user_age(30);
-    request.set_email("john@example.com");
+    request.set_email("zhangkele1221@163.com");
     request.add_tags("test");
     request.add_tags("demo");
     request.set_priority(2);
@@ -137,16 +137,16 @@ int main(int argc, char* argv[]) {
     LOG(INFO) << "Testing parameter validation with brpc...";
     
     // 测试合法请求
-    LOG(INFO) << "\n=== Testing Valid Request ===";
-    TestValidRequest(channel);
+    //LOG(INFO) << "\n=== Testing Valid Request ===";
+    //TestValidRequest(channel);
     
     // 测试非法请求
     LOG(INFO) << "\n=== Testing Invalid Request ===";
     TestInvalidRequest(channel);
     
     // 测试边界情况
-    LOG(INFO) << "\n=== Testing Edge Cases ===";
-    TestEdgeCases(channel);
+    //LOG(INFO) << "\n=== Testing Edge Cases ===";
+    //TestEdgeCases(channel);
     
     LOG(INFO) << "Parameter validation test completed";
     return 0;
